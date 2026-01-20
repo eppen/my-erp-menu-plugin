@@ -1,10 +1,23 @@
+/* Logo 样式 */
+.custom-top-logo {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    height: 100%;
+    background-color: inherit;
+    flex-shrink: 0; /* 防止被压缩 */
+}
+.custom-top-logo img {
+    max-height: 30px;
+}
+
 /* 顶部导航栏容器 */
 .custom-top-menu-container {
     height: 50px;
     background-color: #2d8cf0; /* 使用 iView 默认蓝色或根据 logo */
     display: flex;
     align-items: center;
-    padding: 0 10px;
+    padding: 0 0; /* padding 改为 0，由内部元素 padding 控制 */
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     position: fixed;
     top: 0;
@@ -25,7 +38,7 @@
     font-size: 14px;
     white-space: nowrap;
     transition: background 0.3s;
-    opacity: 0.8;
+    opacity: 0.9; /* 稍微提高默认不透明度 */
 }
 
 .custom-top-menu-item:hover {
@@ -61,24 +74,29 @@
 }
 
 /* 调整页面主体，防止被固定定位元素遮挡 */
-/* 假设原右侧内容区域有一些特定的类名，例如 .layout-content */
-/* 这里使用了 body 类名控制，content.js 中添加了 custom-layout-active */
 body.custom-layout-active {
     padding-top: 50px; /* 给顶栏留出空间 */
 }
 
-/* 针对原页面可能存在的 main 容器进行左边距调整 */
-/* 你可能需要根据实际页面的 div 结构，把右侧内容往右推 */
-/* 简单粗暴的做法：给 body 加 padding-left，或者给已知的 container 加 margin-left */
-/* 根据常见 Admin 模板，可能是 .main 或 .content-wrapper */
-body.custom-layout-active .layout,
-body.custom-layout-active .main-content-con { 
-    /* 尝试一些常见类名，实际需根据页面调整 */
-    margin-left: 240px !important; 
-    margin-top: 50px !important;
+/* 适配右侧内容区域 - 针对 iView Admin 常见结构 */
+/* .main.ivu-layout 是最外层容器，.main-content-con 是内容区 */
+body.custom-layout-active .main.ivu-layout,
+body.custom-layout-active .ivu-layout-has-sider,
+body.custom-layout-active .main-content-con {
+    margin-left: 120px !important; /* 给左侧子菜单留出空间 */
+    width: auto !important; /* 让宽度自适应，减去 margin */
+    transition: margin-left 0.2s;
 }
-/* 如果上面类名不对，可能需要用户自己在 content.js 里找右侧容器 */
 
+/* 如果原有左侧边栏占位还在，尝试强制折叠或隐藏其占位 */
+body.custom-layout-active .left-sider, 
+body.custom-layout-active .ivu-layout-sider {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    flex: 0 0 0 !important;
+}
 
 /* 子菜单样式美化 */
 .custom-sub-menu-container .ivu-menu {
@@ -88,21 +106,29 @@ body.custom-layout-active .main-content-con {
 
 .custom-sub-menu-container .ivu-menu-submenu-title,
 .custom-sub-menu-container .ivu-menu-item {
-    color: rgba(255,255,255,0.7);
+    color: rgba(255,255,255,0.7) !important; /* 强制覆盖 */
     padding: 10px 15px;
     transition: all 0.2s;
 }
 
 .custom-sub-menu-container .ivu-menu-submenu-title:hover,
 .custom-sub-menu-container .ivu-menu-item:hover {
-    color: #fff;
-    background-color: rgba(255,255,255,0.05);
+    color: #fff !important;
+    background-color: rgba(255,255,255,0.1) !important;
 }
 
-.custom-sub-menu-container .ivu-menu-item-active,
-.custom-sub-menu-container .ivu-menu-item-selected {
+/* 高亮选中状态 - 提高优先级 */
+.custom-sub-menu-container .ivu-menu-item.ivu-menu-item-active,
+.custom-sub-menu-container .ivu-menu-item.ivu-menu-item-selected {
     color: #fff !important;
-    background-color: #2d8cf0 !important;
+    background-color: #2d8cf0 !important; /* 特搭配顶栏蓝色 */
+    border-right: 2px solid #fff; /* 增加一个右侧指示条 */
+}
+
+/* 确保选中项里的文字颜色 */
+.custom-sub-menu-container .ivu-menu-item.ivu-menu-item-active span,
+.custom-sub-menu-container .ivu-menu-item.ivu-menu-item-selected span {
+    color: #fff !important;
 }
 
 /* 提示图标 */

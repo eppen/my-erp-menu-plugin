@@ -42,6 +42,30 @@ function applyCustomLayout() {
     const topMenuContainer = document.createElement('div');
     topMenuContainer.className = 'custom-top-menu-container';
 
+    // --- 新增：处理 LOGO ---
+    // 从 side-menu-wrapper 中查找 logo
+    const logoSource = document.querySelector('.side-menu-wrapper .logo-con') || document.querySelector('.logo-con');
+    if (logoSource) {
+        const logoClone = logoSource.cloneNode(true);
+        logoClone.className = 'custom-top-logo'; // 重置类名以便样式控制
+        
+        // 处理图片显示：显示大图，隐藏小图，限制高度
+        const imgs = logoClone.querySelectorAll('img');
+        imgs.forEach(img => {
+            // 简单判断：通常第一个是正常 logo，或者根据 src 判断
+            if (img.src.includes('min')) {
+                img.style.display = 'none';
+            } else {
+                img.style.display = 'block';
+                img.style.height = '30px'; // 顶栏高度50px，logo 30px 比较合适
+                img.style.width = 'auto';
+            }
+        });
+        
+        topMenuContainer.appendChild(logoClone);
+    }
+    // -----------------------
+
     // 4. 创建左侧子菜单容器 (Sidebar for sub-items)
     const subMenuContainer = document.createElement('div');
     subMenuContainer.className = 'custom-sub-menu-container';

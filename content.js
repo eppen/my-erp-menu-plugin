@@ -1,5 +1,37 @@
+// 全局状态：是否启用菜单调整
+let isMenuModificationEnabled = true;
+
+// 恢复原始菜单显示
+function restoreOriginalMenu() {
+    console.log('ERP Menu Plugin: Restoring original menu...');
+    
+    // 移除自定义布局元素
+    const topMenuContainer = document.querySelector('.custom-top-menu-container');
+    const subMenuContainer = document.querySelector('.custom-sub-menu-container');
+    if (topMenuContainer) topMenuContainer.remove();
+    if (subMenuContainer) subMenuContainer.remove();
+    
+    // 恢复原始侧边栏显示
+    const sideParams = document.querySelector('.side-menu-wrapper');
+    const originalSidebar = document.querySelector('.sider-memutree-conainter');
+    if (sideParams) sideParams.style.display = '';
+    if (originalSidebar) originalSidebar.style.display = '';
+    
+    // 移除body类
+    document.body.classList.remove('custom-layout-active');
+    
+    console.log('ERP Menu Plugin: Original menu restored.');
+}
+
 // 定位和修改 DOM 的主要逻辑
 function applyCustomLayout() {
+    // 检查是否启用
+    if (!isMenuModificationEnabled) {
+        console.log('ERP Menu Plugin: Menu modification is disabled.');
+        restoreOriginalMenu();
+        return;
+    }
+    
     console.log('ERP Menu Plugin: Starting layout transformation...');
 
     // 1. 查找原始菜单容器
@@ -225,8 +257,43 @@ function triggerOriginalClick(text) {
     }
 }
 
+// 从存储中读取开关状态
+function loadToggleState() {
+    chrome.storage.sync.get(['menuModificationEnabled'], (result) => {
+        const enabled = result.menuModificationEnabled !== false; // 默认为true
+        isMenuModificationEnabled = enabled;
+        console.log('ERP Menu Plugin: Menu modification enabled:', enabled);
+        
+        if (enabled) {
+            applyCustomLayout();
+        } else {
+            restoreOriginalMenu();
+        }
+    });
+}
+
+// 监听来自popup的消息
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'toggleMenuModification') {
+        isMenuModificationEnabled = request.enabled;
+        console.log('ERP Menu Plugin: Toggle state changed to:', request.enabled);
+        
+        if (request.enabled) {
+            applyCustomLayout();
+        } else {
+            restoreOriginalMenu();
+        }
+        
+        sendResponse({ success: true });
+    }
+    return true;
+});
+
 // 监听 DOM 变化，适配动态加载的单页应用
 const observer = new MutationObserver((mutations) => {
+    // 只有在启用状态下才检查和应用布局
+    if (!isMenuModificationEnabled) return;
+    
     // 检查原来的菜单容器是否出现
     if (document.querySelector('.sider-memutree-conainter') && !document.querySelector('.custom-top-menu-container')) {
         applyCustomLayout();
@@ -236,5 +303,5 @@ const observer = new MutationObserver((mutations) => {
 // 开始监听 body
 observer.observe(document.body, { childList: true, subtree: true });
 
-// 立即尝试运行一次
-applyCustomLayout();
+// 初始化：读取状态并执行
+loadToggleState();

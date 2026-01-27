@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>生成插件图标</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .preview {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .icon-preview {
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #2d8cf0;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1e6bc7;
+        }
+    </style>
+</head>
+<body>
+    <h1>ERP 菜单布局修改器 - 图标生成器</h1>
+    <div class="preview" id="preview"></div>
+    <div>
+        <button onclick="downloadAll()">下载所有图标</button>
+    </div>
+
+    <script>
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            const scale = size / 128;
+            const margin = 4 * scale;
+            const radius = (size / 2) - margin;
+            const center = size / 2;
+            
+            // 背景圆形
+            ctx.beginPath();
+            ctx.arc(center, center, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#2d8cf0';
+            ctx.fill();
+            
+            // 网格线（20% 透明度）
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = Math.max(1, 1.5 * scale);
+            
+            // 水平线
+            [40, 64, 88].forEach(y => {
+                ctx.beginPath();
+                ctx.moveTo(32 * scale, y * scale);
+                ctx.lineTo(96 * scale, y * scale);
+                ctx.stroke();
+            });
+            
+            // 垂直线
+            [40, 64, 88].forEach(x => {
+                ctx.beginPath();
+                ctx.moveTo(x * scale, 32 * scale);
+                ctx.lineTo(x * scale, 96 * scale);
+                ctx.stroke();
+            });
+            
+            // 菜单项
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = Math.max(1, 2 * scale);
+            const cornerRadius = Math.max(1, 2 * scale);
+            
+            // 菜单项1
+            roundRect(ctx, 36 * scale, 42 * scale, 56 * scale, 8 * scale, cornerRadius);
+            ctx.fill();
+            
+            // 菜单项2
+            roundRect(ctx, 36 * scale, 60 * scale, 56 * scale, 8 * scale, cornerRadius);
+            ctx.fill();
+            
+            // 菜单项3（较短）
+            roundRect(ctx, 36 * scale, 78 * scale, 40 * scale, 8 * scale, cornerRadius);
+            ctx.fill();
+            
+            // 调整箭头
+            const arrowX = 82 * scale;
+            const arrowY = 64 * scale;
+            const arrowSize = 8 * scale;
+            ctx.beginPath();
+            ctx.moveTo(arrowX, arrowY);
+            ctx.lineTo(arrowX + arrowSize, arrowY - arrowSize / 2);
+            ctx.lineTo(arrowX + arrowSize, arrowY + arrowSize / 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 调整指示器（右上角）
+            const indicatorSize = 8 * scale;
+            const indicatorX = 100 * scale;
+            const indicatorY = 28 * scale;
+            
+            // 黄色圆圈
+            ctx.beginPath();
+            ctx.arc(indicatorX, indicatorY, indicatorSize, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffd700';
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = Math.max(1, 2 * scale);
+            ctx.stroke();
+            
+            // 向上箭头
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = Math.max(1, 2 * scale);
+            ctx.lineCap = 'round';
+            const arrowIndSize = 4 * scale;
+            ctx.beginPath();
+            ctx.moveTo(indicatorX - arrowIndSize, indicatorY);
+            ctx.lineTo(indicatorX, indicatorY - arrowIndSize);
+            ctx.lineTo(indicatorX + arrowIndSize, indicatorY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(indicatorX, indicatorY - arrowIndSize);
+            ctx.lineTo(indicatorX, indicatorY + arrowIndSize);
+            ctx.stroke();
+            
+            return canvas;
+        }
+        
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+        
+        function downloadCanvas(canvas, filename) {
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function downloadAll() {
+            const sizes = [16, 48, 128];
+            sizes.forEach(size => {
+                const canvas = createIcon(size);
+                setTimeout(() => {
+                    downloadCanvas(canvas, `icon-${size}.png`);
+                }, size * 10); // 延迟下载避免浏览器阻止
+            });
+        }
+        
+        // 显示预览
+        const sizes = [16, 48, 128];
+        const preview = document.getElementById('preview');
+        sizes.forEach(size => {
+            const div = document.createElement('div');
+            div.className = 'icon-preview';
+            const canvas = createIcon(size);
+            div.appendChild(canvas);
+            const label = document.createElement('div');
+            label.textContent = `${size}x${size}`;
+            div.appendChild(label);
+            preview.appendChild(div);
+        });
+    </script>
+</body>
+</html>

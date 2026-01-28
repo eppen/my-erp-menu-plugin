@@ -104,10 +104,42 @@ body.custom-layout-active .ivu-layout-sider {
     width: 100% !important;
 }
 
+/* 第一级子菜单项（直接子元素） */
+.custom-sub-menu-container > .ivu-menu > .ivu-menu-item,
+.custom-sub-menu-container > .ivu-menu > .ivu-menu-submenu > .ivu-menu-submenu-title {
+    color: rgba(255,255,255,0.7) !important;
+    padding: 10px 15px !important;
+    transition: all 0.2s;
+}
+
+/* 第二级子菜单项（第一层嵌套） */
+.custom-sub-menu-container .ivu-menu-submenu .ivu-menu .ivu-menu-item,
+.custom-sub-menu-container .ivu-menu-submenu .ivu-menu .ivu-menu-submenu > .ivu-menu-submenu-title {
+    color: rgba(255,255,255,0.7) !important;
+    padding: 10px 15px 10px 35px !important; /* 增加左侧缩进 */
+    transition: all 0.2s;
+}
+
+/* 第三级子菜单项（第二层嵌套） */
+.custom-sub-menu-container .ivu-menu-submenu .ivu-menu-submenu .ivu-menu .ivu-menu-item,
+.custom-sub-menu-container .ivu-menu-submenu .ivu-menu-submenu .ivu-menu .ivu-menu-submenu > .ivu-menu-submenu-title {
+    color: rgba(255,255,255,0.7) !important;
+    padding: 10px 15px 10px 55px !important; /* 进一步增加左侧缩进 */
+    transition: all 0.2s;
+}
+
+/* 第四级及更深层级（第三层嵌套及以上） */
+.custom-sub-menu-container .ivu-menu-submenu .ivu-menu-submenu .ivu-menu-submenu .ivu-menu .ivu-menu-item,
+.custom-sub-menu-container .ivu-menu-submenu .ivu-menu-submenu .ivu-menu-submenu .ivu-menu .ivu-menu-submenu > .ivu-menu-submenu-title {
+    color: rgba(255,255,255,0.7) !important;
+    padding: 10px 15px 10px 75px !important;
+    transition: all 0.2s;
+}
+
+/* 通用规则：确保所有子菜单项和标题都有基本样式和hover效果 */
 .custom-sub-menu-container .ivu-menu-submenu-title,
 .custom-sub-menu-container .ivu-menu-item {
-    color: rgba(255,255,255,0.7) !important; /* 强制覆盖 */
-    padding: 10px 15px;
+    color: rgba(255,255,255,0.7) !important;
     transition: all 0.2s;
 }
 
@@ -140,4 +172,170 @@ body.custom-layout-active .ivu-layout-sider {
     text-align: center;
     padding: 20px;
     color: #999;
+}
+
+/* 收藏按钮样式 */
+.custom-sub-menu-container .ivu-menu-item {
+    position: relative;
+}
+
+.favorite-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 16px;
+    color: rgba(255,255,255,0.5);
+    transition: all 0.2s;
+    z-index: 10;
+    user-select: none;
+    padding: 2px 4px;
+    line-height: 1;
+    display: inline-block;
+}
+
+.favorite-btn:hover {
+    color: #ffd700 !important;
+    transform: translateY(-50%) scale(1.2);
+}
+
+.favorite-btn.favorited {
+    color: #ffd700;
+}
+
+/* 搜索框样式 */
+.menu-search-container {
+    display: flex;
+    align-items: center;
+    margin-left: 20px;
+    margin-right: 10px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.menu-search-icon {
+    position: absolute;
+    left: 10px;
+    color: rgba(255,255,255,0.7);
+    font-size: 14px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.menu-search-input {
+    width: 200px;
+    height: 32px;
+    padding: 6px 12px 6px 32px;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 4px;
+    background-color: rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.3s;
+}
+
+.menu-search-input::placeholder {
+    color: rgba(255,255,255,0.6);
+}
+
+.menu-search-input:focus {
+    width: 300px;
+    background-color: rgba(255,255,255,0.25);
+    border-color: rgba(255,255,255,0.5);
+}
+
+.menu-search-input:focus + .menu-search-icon,
+.menu-search-input:focus ~ .menu-search-icon {
+    color: rgba(255,255,255,0.9);
+}
+
+/* 搜索结果样式 */
+.search-results-header {
+    padding: 10px 15px;
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.search-results-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.search-result-item {
+    padding: 12px 15px !important;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background-color 0.2s;
+}
+
+.search-result-item:hover {
+    background-color: rgba(255,255,255,0.1) !important;
+}
+
+.search-result-path {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 4px;
+}
+
+.search-result-text {
+    font-size: 14px;
+    color: rgba(255,255,255,0.9);
+}
+
+.search-result-text mark {
+    background-color: #ffd700;
+    color: #333;
+    padding: 2px 0;
+    border-radius: 2px;
+    font-weight: bold;
+}
+
+/* 收藏标签页样式 */
+.favorites-tab {
+    margin-left: auto; /* 将收藏标签页推到右侧 */
+}
+
+/* 收藏列表样式 */
+.favorites-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.favorite-item {
+    position: relative;
+    padding: 10px 15px 10px 15px !important;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.favorite-item:hover {
+    background-color: rgba(255,255,255,0.1) !important;
+}
+
+.favorite-item-text {
+    flex: 1;
+    color: rgba(255,255,255,0.7);
+    transition: color 0.2s;
+}
+
+.favorite-item:hover .favorite-item-text {
+    color: #fff;
+}
+
+.favorite-item .favorite-btn {
+    position: static;
+    transform: none;
+    margin-left: 10px;
+}
+
+.favorite-item .favorite-btn:hover {
+    transform: scale(1.2);
 }

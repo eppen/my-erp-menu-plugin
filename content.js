@@ -1,6 +1,12 @@
 // 全局状态：是否启用菜单调整
 let isMenuModificationEnabled = true;
 
+// 收藏列表
+let favoriteMenuItems = [];
+
+// 当前激活的顶级菜单名称
+let currentTopLevelMenuName = null;
+
 // 恢复原始菜单显示
 function restoreOriginalMenu() {
     console.log('ERP Menu Plugin: Restoring original menu...');
@@ -144,6 +150,9 @@ function applyCustomLayout() {
         topMenuItem.addEventListener('click', () => {
             console.log(`ERP Menu Plugin: Clicked top menu ${text}`);
             
+            // 记录当前激活的顶级菜单名称
+            currentTopLevelMenuName = text;
+            
             // 样式激活状态切换
             document.querySelectorAll('.custom-top-menu-item').forEach(el => el.classList.remove('active'));
             topMenuItem.classList.add('active');
@@ -160,7 +169,7 @@ function applyCustomLayout() {
                 // 递归确保所有层级的 ul 都不受原有 display:none 的影响（可选）
                 // clonedUl.querySelectorAll('ul').forEach(u => u.style.display = 'block');
                 
-                initSubMenuInteractions(clonedUl);
+                initSubMenuInteractions(clonedUl, text);
                 subMenuContainer.appendChild(clonedUl);
             } else {
                 subMenuContainer.innerHTML = '<div class="no-submenu-tip">无子菜单</div>';
@@ -178,12 +187,20 @@ function applyCustomLayout() {
         }
     });
 
+    // 加载收藏列表并添加收藏菜单标签页
+    loadFavorites(() => {
+        addFavoritesTab(topMenuContainer, subMenuContainer);
+    });
+
+    // 添加搜索功能
+    addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig);
+
     console.log('ERP Menu Plugin: Layout transformation applied successfully.');
 }
 
 // 辅助函数：处理子菜单的折叠展开逻辑
 // 因为直接克隆了 DOM，原有的 Vue/iView 事件绑定失效了，需要手动实现简单的折叠效果
-function initSubMenuInteractions(rootElement) {
+function initSubMenuInteractions(rootElement, topLevelMenuName = null) {
     // 找到所有的 子菜单标题 (ivu-menu-submenu-title)
     const titles = rootElement.querySelectorAll('.ivu-menu-submenu-title');
     
@@ -191,9 +208,11 @@ function initSubMenuInteractions(rootElement) {
         // 对应的下一个兄弟元素应该是 ul
         const nextUl = title.nextElementSibling;
         
-        // 修正样式
-        title.style.paddingLeft = '10px'; // 重置 padding，避免层级过深太靠右(看情况)
-        // 也可以保留原 style
+        // 不再硬编码paddingLeft，让CSS根据层级自动处理缩进
+        // 移除可能存在的内联样式覆盖，让CSS规则生效
+        if (title.style.paddingLeft) {
+            title.style.paddingLeft = '';
+        }
         
         if (nextUl && nextUl.tagName === 'UL') {
             title.style.cursor = 'pointer';
@@ -224,37 +243,664 @@ function initSubMenuInteractions(rootElement) {
     // 策略：点击克隆节点 -> 找到对应的原节点 -> 模拟点击
     const items = rootElement.querySelectorAll('.ivu-menu-item');
     items.forEach(item => {
-        item.addEventListener('click', () => {
+        // 添加收藏按钮（传递顶级菜单名称）
+        addFavoriteButton(item, topLevelMenuName);
+        
+        item.addEventListener('click', (e) => {
+            // 如果点击的是收藏按钮，不触发菜单项点击
+            if (e.target.closest('.favorite-btn')) {
+                return;
+            }
+            
              // 视觉高亮
              rootElement.querySelectorAll('.ivu-menu-item').forEach(i => i.classList.remove('ivu-menu-item-active', 'ivu-menu-item-selected'));
              item.classList.add('ivu-menu-item-active', 'ivu-menu-item-selected');
              
-             // 尝试触发原始菜单项的点击
-             // 我们需要一种方式关联回原始节点。
-             // 由于我们是完全克隆，没有 ID 关联。
-             // 可以尝试通过文本内容匹配，或者在 clone 前打标记。
+             // 获取菜单项的完整路径和文本（排除收藏按钮）
+             const itemText = getMenuItemText(item);
+             const itemPath = getMenuItemFullPath(item);
              
-             // 简易方案：文本匹配 (有风险，重名)
-             const itemText = item.innerText.trim();
-             triggerOriginalClick(itemText);
+             // 使用顶级菜单名称+路径+文本进行精确匹配
+             const topMenu = topLevelMenuName || currentTopLevelMenuName;
+             triggerOriginalClick(itemText, itemPath, topMenu);
         });
     });
 }
 
-function triggerOriginalClick(text) {
-    // 在隐藏的原始菜单中找到对应文本的项并点击
+// 获取菜单项的真实文本（排除收藏按钮）
+function getMenuItemText(menuItem) {
+    // 克隆节点以避免修改原始DOM
+    const clone = menuItem.cloneNode(true);
+    // 移除收藏按钮
+    const favoriteBtn = clone.querySelector('.favorite-btn');
+    if (favoriteBtn) {
+        favoriteBtn.remove();
+    }
+    // 获取文本内容
+    return clone.innerText.trim();
+}
+
+// 获取菜单项的完整路径（从顶级菜单到当前项）
+function getMenuItemFullPath(menuItem) {
+    const path = [];
+    let current = menuItem;
+    
+    // 向上查找所有父级菜单标题，直到找到顶级菜单
+    while (current && current !== document.body) {
+        // 查找父级的 submenu-title
+        const parentSubmenu = current.closest('.ivu-menu-submenu');
+        if (parentSubmenu) {
+            const title = parentSubmenu.querySelector('.ivu-menu-submenu-title');
+            if (title) {
+                const titleText = title.innerText.trim();
+                if (titleText) {
+                    path.unshift(titleText);
+                }
+            }
+            current = parentSubmenu.parentElement;
+        } else {
+            // 查找是否在顶级菜单下（查找最近的顶级菜单项）
+            const topLevelItem = current.closest('li');
+            if (topLevelItem) {
+                const topTitle = topLevelItem.querySelector('.ivu-menu-submenu-title');
+                if (topTitle) {
+                    const topText = topTitle.innerText.trim();
+                    if (topText && !path.includes(topText)) {
+                        path.unshift(topText);
+                    }
+                }
+            }
+            break;
+        }
+    }
+    
+    return path;
+}
+
+// 获取原始菜单项所在的顶级菜单名称
+function getTopLevelMenuName(menuItem) {
+    // 向上查找，找到顶级菜单项
+    let current = menuItem;
+    while (current && current !== document.body) {
+        const parentLi = current.closest('li');
+        if (parentLi) {
+            const parentUl = parentLi.parentElement;
+            // 检查是否是顶级菜单（直接子元素是 .ivu-menu）
+            if (parentUl && parentUl.classList.contains('ivu-menu')) {
+                const topLevelLi = parentUl.parentElement;
+                if (topLevelLi && topLevelLi.tagName === 'LI') {
+                    const topTitle = topLevelLi.querySelector('.ivu-menu-submenu-title');
+                    if (topTitle) {
+                        return topTitle.innerText.trim();
+                    }
+                }
+            }
+            current = parentLi.parentElement;
+        } else {
+            break;
+        }
+    }
+    return null;
+}
+
+function triggerOriginalClick(text, path = [], topLevelMenuName = null) {
+    // 在隐藏的原始菜单中找到对应文本和路径的项并点击
     const originalSidebar = document.querySelector('.sider-memutree-conainter');
     if (!originalSidebar) return;
     
-    // 深度优先查找
-    const allItems = originalSidebar.querySelectorAll('.ivu-menu-item');
-    for (let i = 0; i < allItems.length; i++) {
-        if (allItems[i].innerText.trim() === text) {
-            console.log('Triggering original menu click for:', text);
-            allItems[i].click();
-            return;
+    // 如果提供了顶级菜单名称，先找到该顶级菜单下的所有菜单项
+    let itemsToSearch = [];
+    if (topLevelMenuName) {
+        // 找到所有顶级菜单项
+        const rootMenu = originalSidebar.querySelector('.ivu-menu');
+        if (rootMenu) {
+            const topLevelItems = Array.from(rootMenu.children).filter(node => node.tagName === 'LI');
+            for (const topLi of topLevelItems) {
+                const topTitle = topLi.querySelector('.ivu-menu-submenu-title');
+                if (topTitle && topTitle.innerText.trim() === topLevelMenuName) {
+                    // 找到匹配的顶级菜单，获取其下所有菜单项
+                    itemsToSearch = topLi.querySelectorAll('.ivu-menu-item');
+                    break;
+                }
+            }
         }
     }
+    
+    // 如果没有找到或没有提供顶级菜单名称，搜索所有菜单项
+    if (itemsToSearch.length === 0) {
+        itemsToSearch = originalSidebar.querySelectorAll('.ivu-menu-item');
+    }
+    
+    console.log('ERP Menu Plugin: Searching for menu item:', {
+        text: text,
+        path: path,
+        topLevelMenuName: topLevelMenuName,
+        itemsToSearchCount: itemsToSearch.length
+    });
+    
+    for (let i = 0; i < itemsToSearch.length; i++) {
+        const item = itemsToSearch[i];
+        // 获取菜单项的真实文本（排除可能的图标等）
+        const itemText = item.innerText.trim();
+        
+        // 文本必须匹配
+        if (itemText !== text) continue;
+        
+        console.log('ERP Menu Plugin: Found matching text:', itemText);
+        
+        // 如果有路径信息，验证路径是否匹配
+        if (path && path.length > 0) {
+            const itemPath = getMenuItemFullPath(item);
+            
+            // 比较路径
+            // itemPath 可能包含顶级菜单名称，path 也可能包含或不包含
+            // 如果提供了 topLevelMenuName，我们应该确保路径匹配时不包含顶级菜单名称
+            let pathToMatch = path.slice();
+            let itemPathToMatch = itemPath.slice();
+            
+            // 如果 itemPath 的第一个元素是顶级菜单名称，移除它
+            if (topLevelMenuName && itemPathToMatch.length > 0 && itemPathToMatch[0] === topLevelMenuName) {
+                itemPathToMatch = itemPathToMatch.slice(1);
+            }
+            
+            // 如果 path 的第一个元素是顶级菜单名称，移除它
+            if (topLevelMenuName && pathToMatch.length > 0 && pathToMatch[0] === topLevelMenuName) {
+                pathToMatch = pathToMatch.slice(1);
+            }
+            
+            // 比较路径长度和内容
+            if (itemPathToMatch.length === pathToMatch.length) {
+                let pathMatch = true;
+                for (let j = 0; j < pathToMatch.length; j++) {
+                    if (itemPathToMatch[j] !== pathToMatch[j]) {
+                        pathMatch = false;
+                        break;
+                    }
+                }
+                if (pathMatch) {
+                    console.log('Triggering original menu click for:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
+                    item.click();
+                    return;
+                }
+            }
+            
+            // 如果精确匹配失败，尝试模糊匹配（只比较最后几个元素）
+            if (itemPathToMatch.length >= pathToMatch.length && pathToMatch.length > 0) {
+                const itemPathSuffix = itemPathToMatch.slice(-pathToMatch.length);
+                let pathMatch = true;
+                for (let j = 0; j < pathToMatch.length; j++) {
+                    if (itemPathSuffix[j] !== pathToMatch[j]) {
+                        pathMatch = false;
+                        break;
+                    }
+                }
+                if (pathMatch) {
+                    console.log('ERP Menu Plugin: Path fuzzy match! Triggering click for:', text);
+                    item.click();
+                    return;
+                }
+            }
+            
+            // 如果路径匹配失败，但有顶级菜单名称限制，且文本匹配，也允许点击（降级处理）
+            if (topLevelMenuName) {
+                console.log('ERP Menu Plugin: Path mismatch, but text matches in correct top menu. Triggering click for:', text);
+                item.click();
+                return;
+            }
+        } else {
+            // 没有路径信息，但有顶级菜单名称，只在该顶级菜单下匹配
+            if (topLevelMenuName) {
+                console.log('Triggering original menu click for:', text, 'in top menu:', topLevelMenuName);
+                item.click();
+                return;
+            } else {
+                // 没有路径和顶级菜单信息，使用文本匹配（兼容旧代码）
+                console.log('Triggering original menu click for:', text, '(text only)');
+                item.click();
+                return;
+            }
+        }
+    }
+    
+    console.warn('ERP Menu Plugin: Could not find menu item:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
+}
+
+// 加载收藏列表
+function loadFavorites(callback) {
+    chrome.storage.sync.get(['favoriteMenuItems'], (result) => {
+        favoriteMenuItems = result.favoriteMenuItems || [];
+        console.log('ERP Menu Plugin: Loaded favorites:', favoriteMenuItems.length);
+        if (callback) callback();
+    });
+}
+
+// 保存收藏列表
+function saveFavorites() {
+    chrome.storage.sync.set({ favoriteMenuItems: favoriteMenuItems }, () => {
+        console.log('ERP Menu Plugin: Saved favorites:', favoriteMenuItems.length);
+    });
+}
+
+// 添加收藏按钮到菜单项
+function addFavoriteButton(menuItem, topLevelMenuName = null) {
+    // 检查是否已有收藏按钮
+    if (menuItem.querySelector('.favorite-btn')) {
+        return;
+    }
+    
+    // 获取菜单项的真实文本（排除收藏按钮和图标）
+    const itemText = getMenuItemText(menuItem);
+    
+    // 检查是否已收藏（需要匹配文本和路径）
+    const itemPath = getMenuItemPath(menuItem);
+    const fullPath = topLevelMenuName ? [topLevelMenuName, ...itemPath] : itemPath;
+    const isFavorite = favoriteMenuItems.some(fav => {
+        if (fav.text !== itemText) return false;
+        // 比较路径
+        const favPath = fav.path || [];
+        if (favPath.length !== fullPath.length) return false;
+        for (let i = 0; i < favPath.length; i++) {
+            if (favPath[i] !== fullPath[i]) return false;
+        }
+        return true;
+    });
+    
+    const favoriteBtn = document.createElement('span');
+    favoriteBtn.className = `favorite-btn ${isFavorite ? 'favorited' : ''}`;
+    favoriteBtn.innerHTML = isFavorite ? '★' : '☆';
+    favoriteBtn.title = isFavorite ? '取消收藏' : '添加到收藏';
+    
+    favoriteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        toggleFavorite(menuItem, itemText, favoriteBtn, topLevelMenuName);
+    });
+    
+    // 确保菜单项有相对定位
+    const computedStyle = window.getComputedStyle(menuItem);
+    if (computedStyle.position === 'static') {
+        menuItem.style.position = 'relative';
+    }
+    
+    // 为按钮留出空间（如果还没有设置）
+    const currentPaddingRight = computedStyle.paddingRight;
+    const paddingRightValue = parseInt(currentPaddingRight) || 0;
+    if (paddingRightValue < 30) {
+        menuItem.style.paddingRight = '30px';
+    }
+    
+    menuItem.appendChild(favoriteBtn);
+}
+
+// 切换收藏状态
+function toggleFavorite(menuItem, itemText, favoriteBtn, topLevelMenuName = null) {
+    // 获取菜单项的路径信息（包含顶级菜单名称）
+    const itemPath = getMenuItemPath(menuItem);
+    const fullPath = topLevelMenuName ? [topLevelMenuName, ...itemPath] : itemPath;
+    
+    // 查找匹配的收藏项（需要匹配文本和完整路径）
+    const index = favoriteMenuItems.findIndex(fav => {
+        if (fav.text !== itemText) return false;
+        const favPath = fav.path || [];
+        if (favPath.length !== fullPath.length) return false;
+        for (let i = 0; i < favPath.length; i++) {
+            if (favPath[i] !== fullPath[i]) return false;
+        }
+        return true;
+    });
+    
+    if (index > -1) {
+        // 取消收藏
+        favoriteMenuItems.splice(index, 1);
+        favoriteBtn.classList.remove('favorited');
+        favoriteBtn.innerHTML = '☆';
+        favoriteBtn.title = '添加到收藏';
+        console.log('ERP Menu Plugin: Removed from favorites:', itemText, 'path:', fullPath);
+    } else {
+        // 添加收藏
+        favoriteMenuItems.push({
+            text: itemText,
+            path: fullPath,
+            timestamp: Date.now()
+        });
+        favoriteBtn.classList.add('favorited');
+        favoriteBtn.innerHTML = '★';
+        favoriteBtn.title = '取消收藏';
+        console.log('ERP Menu Plugin: Added to favorites:', itemText, 'path:', fullPath);
+    }
+    
+    saveFavorites();
+    
+    // 更新收藏标签页
+    updateFavoritesTab();
+}
+
+// 获取菜单项的路径信息
+function getMenuItemPath(menuItem) {
+    const path = [];
+    let current = menuItem;
+    
+    // 向上查找所有父级菜单标题
+    while (current && current !== document.body) {
+        const parentSubmenu = current.closest('.ivu-menu-submenu');
+        if (parentSubmenu) {
+            const title = parentSubmenu.querySelector('.ivu-menu-submenu-title');
+            if (title) {
+                const titleText = title.innerText.trim();
+                if (titleText) {
+                    path.unshift(titleText);
+                }
+            }
+            current = parentSubmenu.parentElement;
+        } else {
+            break;
+        }
+    }
+    
+    return path;
+}
+
+// 添加收藏标签页
+function addFavoritesTab(topMenuContainer, subMenuContainer) {
+    const favoritesTab = document.createElement('div');
+    favoritesTab.className = 'custom-top-menu-item favorites-tab';
+    // 使用星号图标，如果页面有iView图标库则使用，否则使用文本
+    favoritesTab.innerHTML = '<span style="margin-right: 6px;">★</span><span>收藏</span>';
+    favoritesTab.title = '收藏的菜单项';
+    
+    favoritesTab.addEventListener('click', () => {
+        // 样式激活状态切换
+        document.querySelectorAll('.custom-top-menu-item').forEach(el => el.classList.remove('active'));
+        favoritesTab.classList.add('active');
+        
+        // 显示收藏列表
+        showFavoritesList(subMenuContainer);
+    });
+    
+    // 插入到logo之后（第一个菜单项之前）
+    const firstMenuItem = topMenuContainer.querySelector('.custom-top-menu-item:not(.favorites-tab)');
+    if (firstMenuItem) {
+        topMenuContainer.insertBefore(favoritesTab, firstMenuItem);
+    } else {
+        // 如果没有其他菜单项，追加到末尾
+        topMenuContainer.appendChild(favoritesTab);
+    }
+}
+
+// 显示收藏列表
+function showFavoritesList(subMenuContainer) {
+    subMenuContainer.innerHTML = '';
+    
+    if (favoriteMenuItems.length === 0) {
+        subMenuContainer.innerHTML = '<div class="no-submenu-tip">暂无收藏的菜单项<br/><small style="color: #666;">点击菜单项旁的☆图标可添加到收藏</small></div>';
+        return;
+    }
+    
+    const favoritesList = document.createElement('ul');
+    favoritesList.className = 'ivu-menu favorites-list';
+    favoritesList.style.background = 'transparent';
+    
+    // 创建副本以避免在遍历时修改数组导致的问题
+    const favoritesCopy = [...favoriteMenuItems];
+    
+    favoritesCopy.forEach((fav, index) => {
+        const li = document.createElement('li');
+        li.className = 'ivu-menu-item favorite-item';
+        
+        const pathText = fav.path.length > 0 ? fav.path.join(' > ') + ' > ' : '';
+        li.innerHTML = `
+            <span class="favorite-item-text">${pathText}${fav.text}</span>
+            <span class="favorite-btn favorited" data-text="${fav.text.replace(/"/g, '&quot;')}">★</span>
+        `;
+        
+        // 点击菜单项
+        const textSpan = li.querySelector('.favorite-item-text');
+        textSpan.style.cursor = 'pointer';
+        textSpan.addEventListener('click', () => {
+            // 使用保存的路径信息进行精确匹配
+            // 如果路径中有顶级菜单名称，提取它
+            const topMenu = fav.path && fav.path.length > 0 ? fav.path[0] : null;
+            const subPath = fav.path && fav.path.length > 1 ? fav.path.slice(1) : [];
+            triggerOriginalClick(fav.text, subPath, topMenu);
+        });
+        
+        // 点击收藏按钮取消收藏
+        const btn = li.querySelector('.favorite-btn');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            // 根据文本查找并删除
+            const itemIndex = favoriteMenuItems.findIndex(item => item.text === fav.text);
+            if (itemIndex > -1) {
+                favoriteMenuItems.splice(itemIndex, 1);
+                saveFavorites();
+                showFavoritesList(subMenuContainer);
+            }
+        });
+        
+        favoritesList.appendChild(li);
+    });
+    
+    subMenuContainer.appendChild(favoritesList);
+}
+
+// 更新收藏标签页
+function updateFavoritesTab() {
+    const favoritesTab = document.querySelector('.favorites-tab');
+    if (favoritesTab && favoritesTab.classList.contains('active')) {
+        const subMenuContainer = document.querySelector('.custom-sub-menu-container');
+        if (subMenuContainer) {
+            showFavoritesList(subMenuContainer);
+        }
+    }
+}
+
+// 添加搜索框
+function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
+    const searchContainer = document.createElement('div');
+    searchContainer.className = 'menu-search-container';
+    
+    const searchIcon = document.createElement('span');
+    searchIcon.className = 'menu-search-icon';
+    searchIcon.innerHTML = '🔍';
+    
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'menu-search-input';
+    searchInput.placeholder = '搜索菜单... (Ctrl+K)';
+    searchInput.title = '搜索菜单项，按 Ctrl+K 快速聚焦';
+    
+    searchContainer.appendChild(searchIcon);
+    searchContainer.appendChild(searchInput);
+    
+    // 插入到logo之后
+    const logo = topMenuContainer.querySelector('.custom-top-logo');
+    if (logo) {
+        topMenuContainer.insertBefore(searchContainer, logo.nextSibling);
+    } else {
+        topMenuContainer.insertBefore(searchContainer, topMenuContainer.firstChild);
+    }
+    
+    // 搜索功能
+    let searchTimeout = null;
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        
+        // 防抖处理
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            if (query.length > 0) {
+                performSearch(query, subMenuContainer, rootMenuConfig);
+            } else {
+                // 清空搜索，恢复当前激活的菜单
+                const activeTab = topMenuContainer.querySelector('.custom-top-menu-item.active:not(.favorites-tab)');
+                if (activeTab) {
+                    activeTab.click();
+                } else {
+                    subMenuContainer.innerHTML = '';
+                }
+            }
+        }, 300);
+    });
+    
+    // 键盘快捷键 Ctrl+K 聚焦搜索框
+    document.addEventListener('keydown', (e) => {
+        // Ctrl+K 或 Cmd+K
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            searchInput.focus();
+            searchInput.select();
+        }
+        // ESC 键清除搜索
+        if (e.key === 'Escape' && document.activeElement === searchInput) {
+            searchInput.value = '';
+            searchInput.blur();
+            const activeTab = topMenuContainer.querySelector('.custom-top-menu-item.active:not(.favorites-tab)');
+            if (activeTab) {
+                activeTab.click();
+            }
+        }
+    });
+    
+    // 点击搜索框外部时，如果搜索框为空，恢复菜单
+    document.addEventListener('click', (e) => {
+        if (!searchContainer.contains(e.target) && searchInput.value.trim() === '') {
+            const activeTab = topMenuContainer.querySelector('.custom-top-menu-item.active:not(.favorites-tab)');
+            if (activeTab) {
+                activeTab.click();
+            }
+        }
+    });
+}
+
+// 执行搜索
+function performSearch(query, subMenuContainer, rootMenuConfig) {
+    const results = [];
+    const searchLower = query.toLowerCase();
+    
+    // 遍历所有顶级菜单项
+    const topLevelItems = Array.from(rootMenuConfig.children).filter(node => node.tagName === 'LI');
+    
+    topLevelItems.forEach(topLi => {
+        const topTitle = topLi.querySelector('.ivu-menu-submenu-title');
+        const topText = topTitle ? (topTitle.innerText || '').trim() : '';
+        
+        // 搜索所有子菜单项
+        const allSubItems = topLi.querySelectorAll('.ivu-menu-item');
+        allSubItems.forEach(item => {
+            const itemText = getMenuItemText(item);
+            const itemTextLower = itemText.toLowerCase();
+            
+            // 检查是否匹配
+            if (itemTextLower.includes(searchLower)) {
+                // 获取菜单项的完整路径
+                const path = getMenuItemFullPathFromOriginal(item);
+                const fullPath = topText ? [topText, ...path] : path;
+                
+                results.push({
+                    text: itemText,
+                    path: fullPath,
+                    topLevelMenu: topText,
+                    element: item
+                });
+            }
+        });
+    });
+    
+    // 显示搜索结果
+    displaySearchResults(results, subMenuContainer, query);
+}
+
+// 从原始菜单项获取完整路径
+function getMenuItemFullPathFromOriginal(menuItem) {
+    const path = [];
+    let current = menuItem;
+    
+    // 向上查找所有父级菜单标题
+    while (current && current !== document.body) {
+        const parentSubmenu = current.closest('.ivu-menu-submenu');
+        if (parentSubmenu) {
+            const title = parentSubmenu.querySelector('.ivu-menu-submenu-title');
+            if (title) {
+                const titleText = title.innerText.trim();
+                if (titleText) {
+                    path.unshift(titleText);
+                }
+            }
+            current = parentSubmenu.parentElement;
+        } else {
+            break;
+        }
+    }
+    
+    return path;
+}
+
+// 显示搜索结果
+function displaySearchResults(results, subMenuContainer, query) {
+    subMenuContainer.innerHTML = '';
+    
+    if (results.length === 0) {
+        subMenuContainer.innerHTML = `<div class="no-submenu-tip">未找到匹配的菜单项<br/><small style="color: #666;">搜索关键词: "${query}"</small></div>`;
+        return;
+    }
+    
+    const resultsList = document.createElement('ul');
+    resultsList.className = 'ivu-menu search-results-list';
+    resultsList.style.background = 'transparent';
+    
+    // 按路径分组显示结果
+    results.forEach((result, index) => {
+        const li = document.createElement('li');
+        li.className = 'ivu-menu-item search-result-item';
+        
+        const pathText = result.path.length > 0 ? result.path.join(' > ') + ' > ' : '';
+        const displayText = result.text;
+        
+        // 高亮匹配的文本
+        const highlightedText = highlightMatch(displayText, query);
+        
+        li.innerHTML = `
+            <div class="search-result-path">${pathText}</div>
+            <div class="search-result-text">${highlightedText}</div>
+        `;
+        
+        li.addEventListener('click', () => {
+            // 触发原始菜单项的点击
+            triggerOriginalClick(result.text, result.path.slice(1), result.topLevelMenu);
+            
+            // 切换到对应的顶级菜单
+            const topMenuContainer = document.querySelector('.custom-top-menu-container');
+            if (topMenuContainer && result.topLevelMenu) {
+                const topMenuItems = topMenuContainer.querySelectorAll('.custom-top-menu-item:not(.favorites-tab)');
+                for (const topItem of topMenuItems) {
+                    const topText = topItem.querySelector('span')?.innerText || '';
+                    if (topText === result.topLevelMenu) {
+                        topItem.click();
+                        break;
+                    }
+                }
+            }
+        });
+        
+        resultsList.appendChild(li);
+    });
+    
+    // 添加结果数量提示
+    const header = document.createElement('div');
+    header.className = 'search-results-header';
+    header.innerHTML = `找到 ${results.length} 个匹配项`;
+    subMenuContainer.appendChild(header);
+    
+    subMenuContainer.appendChild(resultsList);
+}
+
+// 高亮匹配的文本
+function highlightMatch(text, query) {
+    if (!query) return text;
+    
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(regex, '<mark>$1</mark>');
 }
 
 // 从存储中读取开关状态
@@ -303,5 +949,7 @@ const observer = new MutationObserver((mutations) => {
 // 开始监听 body
 observer.observe(document.body, { childList: true, subtree: true });
 
-// 初始化：读取状态并执行
-loadToggleState();
+// 初始化：加载收藏列表并读取状态
+loadFavorites(() => {
+    loadToggleState();
+});

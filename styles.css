@@ -104,6 +104,16 @@ body.custom-layout-active .ivu-layout-sider {
     width: 100% !important;
 }
 
+/* 确保所有子菜单默认展开 */
+.custom-sub-menu-container .ivu-menu ul {
+    display: block !important;
+}
+
+/* 确保子菜单容器默认显示 */
+.custom-sub-menu-container .ivu-menu-submenu > ul {
+    display: block !important;
+}
+
 /* 第一级子菜单项（直接子元素） */
 .custom-sub-menu-container > .ivu-menu > .ivu-menu-item,
 .custom-sub-menu-container > .ivu-menu > .ivu-menu-submenu > .ivu-menu-submenu-title {

@@ -24,7 +24,8 @@
     left: 0;
     width: 100vw;
     z-index: 10000;
-    overflow-x: auto; /* 允许横向滚动 */
+    overflow-x: visible; /* 改为 visible，折叠功能会处理超出部分 */
+    overflow-y: visible;
 }
 
 /* 顶部导航项 */
@@ -348,4 +349,52 @@ body.custom-layout-active .ivu-layout-sider {
 
 .favorite-item .favorite-btn:hover {
     transform: scale(1.2);
+}
+
+/* 横向菜单折叠功能样式 */
+.custom-more-menu {
+    position: relative;
+    margin-left: auto; /* 将"更多"菜单推到右侧 */
+}
+
+.custom-more-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: #2d8cf0;
+    min-width: 150px;
+    max-width: 250px;
+    max-height: 400px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border-radius: 4px;
+    margin-top: 4px;
+    z-index: 10001;
+}
+
+.custom-dropdown-item {
+    display: block !important;
+    width: 100%;
+    padding: 10px 15px !important;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.custom-dropdown-item:hover {
+    background-color: rgba(255,255,255,0.15) !important;
+}
+
+.custom-dropdown-item.active {
+    background-color: rgba(0,0,0,0.2) !important;
+    font-weight: bold;
+}
+
+.menu-item-hidden {
+    display: none !important;
 }

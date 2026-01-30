@@ -197,6 +197,19 @@ function applyCustomLayout() {
     // 添加搜索功能
     addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig);
 
+    // 添加横向菜单折叠功能（可选）- 延迟执行确保DOM渲染完成
+    // 使用双重延迟确保所有元素都已渲染
+    setTimeout(() => {
+        initHorizontalMenuCollapse(topMenuContainer);
+        // 再次延迟执行一次，确保布局稳定
+        setTimeout(() => {
+            const collapseFunc = topMenuContainer.__collapseFunc;
+            if (collapseFunc) {
+                collapseFunc();
+            }
+        }, 100);
+    }, 300);
+
     console.log('ERP Menu Plugin: Layout transformation applied successfully.');
 }
 
@@ -963,6 +976,196 @@ const observer = new MutationObserver((mutations) => {
 
 // 开始监听 body
 observer.observe(document.body, { childList: true, subtree: true });
+
+// 初始化横向菜单折叠功能
+function initHorizontalMenuCollapse(topMenuContainer) {
+    // 检查是否启用折叠功能（默认启用）
+    chrome.storage.sync.get(['horizontalMenuCollapseEnabled'], (result) => {
+        const collapseEnabled = result.horizontalMenuCollapseEnabled !== false; // 默认为true
+        
+        if (collapseEnabled) {
+            // 创建应用折叠的函数
+            const applyCollapse = () => {
+                applyMenuCollapse(topMenuContainer);
+            };
+            
+            // 保存函数引用，以便后续调用
+            topMenuContainer.__collapseFunc = applyCollapse;
+            
+            // 立即执行一次
+            applyCollapse();
+            
+            // 监听窗口大小变化
+            let resizeTimeout = null;
+            const resizeHandler = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    applyCollapse();
+                }, 200);
+            };
+            
+            window.addEventListener('resize', resizeHandler);
+            
+            // 保存resize handler以便后续清理（如果需要）
+            topMenuContainer.__resizeHandler = resizeHandler;
+        }
+    });
+}
+
+// 应用菜单折叠逻辑
+function applyMenuCollapse(topMenuContainer) {
+    // 移除已存在的"更多"菜单和下拉菜单
+    const existingMoreMenu = topMenuContainer.querySelector('.custom-more-menu');
+    const existingDropdown = topMenuContainer.querySelector('.custom-more-dropdown');
+    if (existingMoreMenu) existingMoreMenu.remove();
+    if (existingDropdown) existingDropdown.remove();
+    
+    // 移除所有菜单项的隐藏状态
+    const allMenuItems = topMenuContainer.querySelectorAll('.custom-top-menu-item:not(.custom-more-menu):not(.favorites-tab)');
+    allMenuItems.forEach(item => {
+        item.style.display = '';
+        item.style.visibility = 'visible';
+        item.classList.remove('menu-item-hidden');
+    });
+    
+    // 等待DOM更新
+    requestAnimationFrame(() => {
+        // 获取容器可用宽度（排除logo、搜索框、收藏标签页）
+        const logo = topMenuContainer.querySelector('.custom-top-logo');
+        const searchContainer = topMenuContainer.querySelector('.menu-search-container');
+        const favoritesTab = topMenuContainer.querySelector('.favorites-tab');
+        
+        const containerRect = topMenuContainer.getBoundingClientRect();
+        let availableWidth = containerRect.width;
+        
+        // 减去固定元素的宽度
+        if (logo) {
+            availableWidth -= logo.getBoundingClientRect().width;
+        }
+        if (searchContainer) {
+            availableWidth -= searchContainer.getBoundingClientRect().width;
+        }
+        if (favoritesTab) {
+            availableWidth -= favoritesTab.getBoundingClientRect().width;
+        }
+        
+        // 为"更多"菜单预留空间
+        const moreMenuWidth = 80;
+        availableWidth -= moreMenuWidth;
+        
+        // 如果可用宽度不足，不启用折叠
+        if (availableWidth < 200) {
+            return;
+        }
+        
+        // 计算哪些菜单项需要折叠
+        let totalWidth = 0;
+        const menuItems = Array.from(allMenuItems);
+        const itemsToCollapse = [];
+        
+        for (let i = 0; i < menuItems.length; i++) {
+            const item = menuItems[i];
+            const itemRect = item.getBoundingClientRect();
+            const itemWidth = itemRect.width || item.offsetWidth;
+            
+            if (totalWidth + itemWidth > availableWidth && i > 0) {
+                // 从当前项开始，所有后续项都需要折叠
+                for (let j = i; j < menuItems.length; j++) {
+                    itemsToCollapse.push(menuItems[j]);
+                }
+                break;
+            }
+            
+            totalWidth += itemWidth;
+        }
+        
+        // 如果有需要折叠的菜单项，创建"更多"菜单
+        if (itemsToCollapse.length > 0) {
+            // 隐藏需要折叠的菜单项
+            itemsToCollapse.forEach(item => {
+                item.style.display = 'none';
+                item.classList.add('menu-item-hidden');
+            });
+            
+            // 创建"更多"菜单按钮
+            const moreMenu = document.createElement('div');
+            moreMenu.className = 'custom-top-menu-item custom-more-menu';
+            moreMenu.innerHTML = '<span>更多</span><i class="ivu-icon ivu-icon-ios-arrow-down" style="margin-left: 4px; font-size: 12px; transition: transform 0.3s;"></i>';
+            moreMenu.title = `更多菜单 (${itemsToCollapse.length}项)`;
+            
+            // 创建下拉菜单容器
+            const dropdownMenu = document.createElement('div');
+            dropdownMenu.className = 'custom-more-dropdown';
+            dropdownMenu.style.display = 'none';
+            
+            // 添加折叠的菜单项到下拉菜单
+            itemsToCollapse.forEach(item => {
+                const dropdownItem = document.createElement('div');
+                dropdownItem.className = 'custom-top-menu-item custom-dropdown-item';
+                
+                // 复制菜单项的内容
+                const itemContent = item.cloneNode(true);
+                dropdownItem.innerHTML = itemContent.innerHTML;
+                dropdownItem.title = item.title || itemContent.querySelector('span')?.innerText || '';
+                
+                // 复制激活状态
+                if (item.classList.contains('active')) {
+                    dropdownItem.classList.add('active');
+                }
+                
+                dropdownItem.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // 触发原始菜单项的点击
+                    const originalText = dropdownItem.querySelector('span')?.innerText;
+                    const originalItem = Array.from(allMenuItems).find(orig => {
+                        const origText = orig.querySelector('span')?.innerText;
+                        return origText === originalText;
+                    });
+                    if (originalItem) {
+                        originalItem.click();
+                    }
+                    dropdownMenu.style.display = 'none';
+                    const arrow = moreMenu.querySelector('i');
+                    if (arrow) {
+                        arrow.style.transform = 'rotate(0deg)';
+                    }
+                });
+                
+                dropdownMenu.appendChild(dropdownItem);
+            });
+            
+            // 点击"更多"按钮显示/隐藏下拉菜单
+            moreMenu.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isVisible = dropdownMenu.style.display !== 'none';
+                dropdownMenu.style.display = isVisible ? 'none' : 'block';
+                
+                // 更新箭头方向
+                const arrow = moreMenu.querySelector('i');
+                if (arrow) {
+                    arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+                }
+            });
+            
+            // 点击外部关闭下拉菜单
+            const closeDropdown = (e) => {
+                if (!moreMenu.contains(e.target) && !dropdownMenu.contains(e.target)) {
+                    dropdownMenu.style.display = 'none';
+                    const arrow = moreMenu.querySelector('i');
+                    if (arrow) {
+                        arrow.style.transform = 'rotate(0deg)';
+                    }
+                }
+            };
+            
+            // 使用事件委托，避免重复绑定
+            document.addEventListener('click', closeDropdown);
+            
+            topMenuContainer.appendChild(moreMenu);
+            topMenuContainer.appendChild(dropdownMenu);
+        }
+    });
+}
 
 // 初始化：加载收藏列表并读取状态
 loadFavorites(() => {

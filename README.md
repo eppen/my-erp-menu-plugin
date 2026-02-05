@@ -48,9 +48,28 @@
 ### 图标生成
 项目包含自动生成图标的脚本。如果更改了图标样式，可以使用 `generate_icons.py` 或 `generate_icons.html` 重新生成不同尺寸的图标文件。
 
-### 打包
-运行 `package.py` 可以将项目打包成 zip 文件，方便发布或分发。
+### 打包（Chrome / Edge）
+项目内置 `package.py` 打包脚本，用于生成可以直接上传到浏览器扩展商店的 zip 包。
+
+- **同时打包 Chrome 和 Edge（推荐）**：
 
 ```bash
 python package.py
 ```
+
+- **仅打包 Chrome 插件**：
+
+```bash
+python package.py --target chrome
+```
+
+- **仅打包 Edge 插件**：
+
+```bash
+python package.py --target edge
+```
+
+脚本会自动读取 `manifest.json` 中的 `version` 字段，并生成类似下面的文件：
+
+- `my-erp-menu-plugin-chrome-v1.1.1.zip`  （用于上传到 Chrome Web Store）
+- `my-erp-menu-plugin-edge-v1.1.1.zip`    （用于上传到 Edge 外接程序商店）

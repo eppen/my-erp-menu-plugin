@@ -1167,7 +1167,138 @@ function applyMenuCollapse(topMenuContainer) {
     });
 }
 
+// 监听 scroll-outer 里的 tag-nav-NodeID 点击，同步定位左侧导航菜单
+function initTagNavNavigation() {
+    // 使用捕获阶段以确保在 SPA 路由处理前执行
+    document.addEventListener('click', (e) => {
+        if (!isMenuModificationEnabled) return;
+        if (!document.querySelector('.custom-top-menu-container')) return;
+
+        // 找到被点击的 tag-nav-* 元素
+        const tagNavItem = e.target.closest('[id^="tag-nav-"]');
+        if (!tagNavItem) return;
+
+        // 确保该元素在 scroll-outer 容器内
+        const scrollOuter = document.querySelector('.scroll-outer');
+        if (!scrollOuter || !scrollOuter.contains(tagNavItem)) return;
+
+        // 提取 tag 文本（去掉关闭按钮等图标元素）
+        const tagText = extractTagNavText(tagNavItem);
+        if (!tagText) return;
+
+        console.log('ERP Menu Plugin: Tag nav clicked:', tagText);
+
+        // 同步定位左侧导航菜单
+        navigateSidebarToItem(tagText);
+    }, true);
+}
+
+// 从 tag-nav 元素中提取纯文本（排除关闭按钮/图标等子元素）
+function extractTagNavText(tagNavItem) {
+    const clone = tagNavItem.cloneNode(true);
+    clone.querySelectorAll('.ivu-icon, .ivu-tag-close, [class*="close"]').forEach(el => el.remove());
+    return clone.innerText.trim();
+}
+
+// 根据文本找到对应的原始菜单项，切换顶级 tab 并高亮左侧菜单项
+function navigateSidebarToItem(text) {
+    const originalSidebar = document.querySelector('.sider-memutree-conainter');
+    if (!originalSidebar) return;
+
+    const rootMenu = originalSidebar.querySelector('.ivu-menu');
+    if (!rootMenu) return;
+
+    const topLevelItems = Array.from(rootMenu.children).filter(node => node.tagName === 'LI');
+
+    for (const topLi of topLevelItems) {
+        const menuItems = topLi.querySelectorAll('.ivu-menu-item');
+        for (const menuItem of menuItems) {
+            const itemText = menuItem.innerText.trim();
+            if (itemText !== text) continue;
+
+            // 找到对应顶级菜单名称
+            const topTitle = topLi.querySelector('.ivu-menu-submenu-title');
+            const topText = topTitle ? topTitle.innerText.trim() : null;
+
+            if (topText) {
+                const topMenuItems = document.querySelectorAll(
+                    '.custom-top-menu-item:not(.favorites-tab):not(.custom-more-menu)'
+                );
+                for (const topMenuItem of topMenuItems) {
+                    const menuText = topMenuItem.querySelector('span')?.innerText;
+                    if (menuText === topText) {
+                        if (!topMenuItem.classList.contains('active')) {
+                            // 切换顶级 tab，子菜单会重新加载
+                            topMenuItem.click();
+                            // 等待子菜单 DOM 渲染完成后再高亮（与顶级 tab 点击后子菜单初始化的延迟保持一致）
+                            setTimeout(() => highlightSidebarItem(text), 150);
+                        } else {
+                            // 顶级 tab 已激活，直接高亮
+                            highlightSidebarItem(text);
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // 找不到对应顶级 tab 时，直接尝试高亮
+            highlightSidebarItem(text);
+            return;
+        }
+    }
+
+    console.log('ERP Menu Plugin: No matching menu item found for tag:', text);
+}
+
+// 高亮左侧子菜单容器中指定文本的菜单项
+function highlightSidebarItem(text) {
+    const subMenuContainer = document.querySelector('.custom-sub-menu-container');
+    if (!subMenuContainer) return false;
+
+    const items = subMenuContainer.querySelectorAll('.ivu-menu-item');
+    for (const item of items) {
+        const itemText = getMenuItemText(item);
+        if (itemText !== text) continue;
+
+        // 移除所有激活状态
+        subMenuContainer.querySelectorAll('.ivu-menu-item').forEach(i => {
+            i.classList.remove('ivu-menu-item-active', 'ivu-menu-item-selected');
+        });
+
+        // 高亮当前菜单项
+        item.classList.add('ivu-menu-item-active', 'ivu-menu-item-selected');
+
+        // 确保父级子菜单展开
+        ensureParentSubmenusExpanded(item, subMenuContainer);
+
+        // 滚动到可视区域
+        item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return true;
+    }
+    return false;
+}
+
+// 展开指定菜单项的所有折叠的父级子菜单
+function ensureParentSubmenusExpanded(item, container) {
+    let parent = item.parentElement;
+    while (parent && parent !== container) {
+        if (parent.tagName === 'UL' && parent.style.display === 'none') {
+            parent.style.display = 'block';
+            // 同步更新折叠箭头状态
+            const siblingTitle = parent.previousElementSibling;
+            if (siblingTitle && siblingTitle.classList.contains('ivu-menu-submenu-title')) {
+                const arrow = siblingTitle.querySelector('.ivu-icon-ios-arrow-down');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+        parent = parent.parentElement;
+    }
+}
+
 // 初始化：加载收藏列表并读取状态
 loadFavorites(() => {
     loadToggleState();
 });
+
+// 初始化 tag-nav 点击监听
+initTagNavNavigation();

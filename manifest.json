@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ERP Menu Layout Modifier",
-  "version": "1.2.3",
-  "description": "Modify the menu layout of the ERP system",
+  "version": "1.2.4",
+  "description": "Modify the menu layout of the ERP system. Includes a public demo page for store review testing.",
   "icons": {
     "16": "images/icon-16.png",
     "48": "images/icon-48.png",
@@ -22,7 +22,14 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://60.190.250.202/*", "http://10.10.8.149/*", "http://10.10.8.137/*"],
+      "matches": [
+        "http://60.190.250.202/*",
+        "http://10.10.8.149/*",
+        "http://10.10.8.137/*",
+        "https://eppen.github.io/my-erp-menu-plugin/*",
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
       "js": ["content.js"],
       "css": ["styles.css"]
     }

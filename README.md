@@ -17,6 +17,11 @@
 
 提审说明文稿见 [`CERTIFICATION-NOTES.md`](CERTIFICATION-NOTES.md)。首次上线 Demo 前请开启 GitHub Pages（分支 `master`/`main`，目录 `/ (root)`）。
 
+隐私相关：
+
+- **隐私政策（公开页）**：https://eppen.github.io/my-erp-menu-plugin/privacy.html
+- **Partner Center Privacy 填写稿**：[`PRIVACY-STORE.md`](PRIVACY-STORE.md)
+
 ## 安装说明
 
 开发调试可通过「加载已解压的扩展程序」安装：
@@ -48,6 +53,8 @@
 ├── popup.html           # 点击扩展图标显示的弹窗界面
 ├── popup.js             # 弹窗界面的交互逻辑
 ├── demo/index.html      # 公开审核用 Demo 站点（模拟 ERP DOM）
+├── privacy.html         # 公开隐私政策（商店 Privacy Policy URL）
+├── PRIVACY-STORE.md     # Edge Partner Center Privacy 页填写指南
 ├── CERTIFICATION-NOTES.md  # Edge Notes for certification 文稿
 ├── package.py           # 打包脚本，用于生成 .zip 发布包
 ├── generate_icons.*     # 图标生成辅助脚本 (Python/JS/HTML)

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — ERP Menu Layout Modifier</title>
+  <style>
+    :root {
+      --text: #1f2328;
+      --muted: #656d76;
+      --border: #d0d7de;
+      --bg: #ffffff;
+      --accent: #0969da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: #f6f8fa;
+      line-height: 1.65;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+    header {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; }
+    .lang-switch { margin-top: 12px; font-size: 0.9rem; }
+    .lang-switch a { color: var(--accent); margin-right: 12px; }
+    section {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 28px;
+      margin-bottom: 16px;
+    }
+    h2 { margin: 0 0 12px; font-size: 1.15rem; }
+    h3 { margin: 16px 0 8px; font-size: 1rem; }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: 6px; }
+    .en { display: none; }
+    body.show-en .zh { display: none; }
+    body.show-en .en { display: block; }
+    footer {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+      margin-top: 24px;
+    }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Privacy Policy / 隐私政策</h1>
+      <p class="meta">
+        Product: <strong>ERP Menu Layout Modifier</strong><br>
+        Last updated / 更新日期: 2026-08-17
+      </p>
+      <div class="lang-switch">
+        <a href="#" id="to-zh">中文</a>
+        <a href="#" id="to-en">English</a>
+      </div>
+    </header>
+
+    <!-- ========== 中文 ========== -->
+    <div class="zh">
+      <section>
+        <h2>1. 概述</h2>
+        <p>本隐私政策适用于浏览器扩展 <strong>ERP Menu Layout Modifier</strong>（以下简称「本扩展」），适用于 Microsoft Edge 与 Chromium 内核浏览器。</p>
+        <p>本扩展的唯一用途是：在指定的 ERP / 演示页面上，将左侧菜单布局调整为顶部一级菜单 + 左侧二级菜单，并提供开关、收藏与搜索等本地辅助功能。</p>
+      </section>
+
+      <section>
+        <h2>2. 我们收集哪些数据</h2>
+        <p><strong>本扩展不向开发者服务器上传任何数据。</strong>不设远程后端，不采集分析统计，不投放广告。</p>
+        <h3>仅保存在浏览器本地 / 同步存储中的偏好</h3>
+        <ul>
+          <li><strong>菜单调整开关状态</strong>（是否启用布局改造）</li>
+          <li><strong>收藏的菜单项名称</strong>（用户主动收藏的菜单文案）</li>
+          <li><strong>横向菜单折叠偏好</strong>（是否启用「更多」折叠）</li>
+        </ul>
+        <p>上述数据通过浏览器提供的 <code>chrome.storage.sync</code> 保存在用户设备（并可随用户浏览器账号同步）。开发者无法访问这些数据。</p>
+        <h3>页面内容（仅本地处理）</h3>
+        <p>在匹配的网站上，本扩展会读取页面中的菜单 DOM（如菜单标题、结构），以便在本地重组界面。这些内容<strong>不会</strong>被发送到任何外部服务器。</p>
+        <p>本扩展<strong>不收集</strong>：姓名、邮箱、密码、身份证件、支付信息、通讯内容、精确位置、浏览历史上传、健康信息等。</p>
+      </section>
+
+      <section>
+        <h2>3. 数据如何使用</h2>
+        <ul>
+          <li>仅用于实现已声明的菜单布局改造与相关本地功能（开关记忆、收藏、搜索、折叠）。</li>
+          <li>不用于广告、画像、跨网站跟踪或出售。</li>
+          <li>不与第三方共享用户数据（除浏览器自身提供的同步机制外，该机制由浏览器厂商管理）。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. 权限说明</h2>
+        <ul>
+          <li><strong>storage</strong>：保存上述本地偏好。</li>
+          <li><strong>activeTab</strong>：在用户与扩展弹窗交互时，向当前标签页通知开关状态。</li>
+          <li><strong>scripting</strong>：支持在匹配页面注入布局改造所需的脚本/样式能力。</li>
+          <li><strong>主机权限（指定 URL）</strong>：仅在声明的 ERP 地址、公开 Demo 及本地测试地址上运行内容脚本，不作用于任意网站。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. 远程代码</h2>
+        <p>本扩展<strong>不使用远程代码</strong>。所有逻辑均打包在扩展包内，不从互联网动态加载可执行脚本。</p>
+      </section>
+
+      <section>
+        <h2>6. 用户控制与数据删除</h2>
+        <ul>
+          <li>可在扩展弹窗中随时关闭「启用菜单调整」。</li>
+          <li>可通过浏览器「扩展」页面卸载本扩展；卸载后，扩展写入的本地偏好将随浏览器机制清除或不再使用。</li>
+          <li>也可在浏览器设置中清除扩展的存储数据 / 同步数据。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>7. 儿童隐私</h2>
+        <p>本扩展面向企业内部 ERP 使用场景，不面向 13 岁以下儿童，也不故意收集儿童个人信息。</p>
+      </section>
+
+      <section>
+        <h2>8. 政策更新</h2>
+        <p>若数据处理方式发生变化，我们将更新本页面的「更新日期」，并在扩展商店资料中同步隐私政策链接。</p>
+      </section>
+
+      <section>
+        <h2>9. 联系方式</h2>
+        <p>如对本政策有疑问，请通过扩展的 GitHub 仓库 Issues 联系开发者：</p>
+        <p><a href="https://github.com/eppen/my-erp-menu-plugin/issues">https://github.com/eppen/my-erp-menu-plugin/issues</a></p>
+      </section>
+    </div>
+
+    <!-- ========== English ========== -->
+    <div class="en">
+      <section>
+        <h2>1. Overview</h2>
+        <p>This Privacy Policy applies to the browser extension <strong>ERP Menu Layout Modifier</strong> (“the Extension”) for Microsoft Edge and other Chromium-based browsers.</p>
+        <p>The Extension’s single purpose is to transform a left sidebar menu into a top-level navigation bar plus a left sub-menu on designated ERP / demo pages, with local helpers such as an on/off switch, favorites, and search.</p>
+      </section>
+
+      <section>
+        <h2>2. What data we collect</h2>
+        <p><strong>The Extension does not upload any data to developer-operated servers.</strong> There is no remote backend, no analytics, and no advertising.</p>
+        <h3>Preferences stored only in browser storage</h3>
+        <ul>
+          <li><strong>Menu modification on/off state</strong></li>
+          <li><strong>Favorite menu item labels</strong> (only items the user stars)</li>
+          <li><strong>Horizontal menu collapse preference</strong></li>
+        </ul>
+        <p>These values are saved via <code>chrome.storage.sync</code> on the user’s device (and may sync through the browser vendor’s sync feature). The developer cannot access this data.</p>
+        <h3>Website content (processed locally only)</h3>
+        <p>On matched sites, the Extension reads menu-related DOM (titles and structure) solely to rebuild the UI locally. This content is <strong>not</strong> transmitted to any external server.</p>
+        <p>The Extension does <strong>not</strong> collect names, emails, passwords, government IDs, payment data, message content, precise location, uploaded browsing history, or health information.</p>
+      </section>
+
+      <section>
+        <h2>3. How data is used</h2>
+        <ul>
+          <li>Only to provide the declared menu-layout features and related local preferences.</li>
+          <li>Not for advertising, profiling, cross-site tracking, or sale.</li>
+          <li>Not shared with third parties, except browser sync mechanisms controlled by the browser vendor.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. Permissions</h2>
+        <ul>
+          <li><strong>storage</strong> — save the preferences listed above.</li>
+          <li><strong>activeTab</strong> — notify the active tab when the user toggles the feature from the popup.</li>
+          <li><strong>scripting</strong> — support injecting the layout scripts/styles on matched pages.</li>
+          <li><strong>Host permissions (specific URLs)</strong> — run content scripts only on declared ERP hosts, the public demo, and local test URLs—not on arbitrary websites.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. Remote code</h2>
+        <p>The Extension does <strong>not</strong> use remote code. All logic ships inside the extension package; no executable scripts are fetched from the network at runtime.</p>
+      </section>
+
+      <section>
+        <h2>6. User controls and deletion</h2>
+        <ul>
+          <li>Turn off menu modification anytime in the extension popup.</li>
+          <li>Uninstall the Extension from the browser’s Extensions page; stored preferences are cleared or unused thereafter per browser behavior.</li>
+          <li>Clear extension storage / sync data in browser settings if desired.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>7. Children’s privacy</h2>
+        <p>The Extension is intended for enterprise ERP workflows and is not directed at children under 13. We do not knowingly collect children’s personal information.</p>
+      </section>
+
+      <section>
+        <h2>8. Changes</h2>
+        <p>If data practices change, we will update the “Last updated” date on this page and keep the store listing privacy URL current.</p>
+      </section>
+
+      <section>
+        <h2>9. Contact</h2>
+        <p>Questions about this policy can be raised via GitHub Issues:</p>
+        <p><a href="https://github.com/eppen/my-erp-menu-plugin/issues">https://github.com/eppen/my-erp-menu-plugin/issues</a></p>
+      </section>
+    </div>
+
+    <footer>
+      ERP Menu Layout Modifier ·
+      <a href="https://github.com/eppen/my-erp-menu-plugin">GitHub</a> ·
+      <a href="./demo/">Demo</a>
+    </footer>
+  </div>
+
+  <script>
+    var toZh = document.getElementById('to-zh');
+    var toEn = document.getElementById('to-en');
+    toZh.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.body.classList.remove('show-en');
+    });
+    toEn.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.body.classList.add('show-en');
+    });
+    if (/^en\b/i.test(navigator.language || '')) {
+      document.body.classList.add('show-en');
+    }
+  </script>
+</body>
+</html>

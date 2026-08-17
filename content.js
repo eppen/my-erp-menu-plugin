@@ -7,9 +7,15 @@ let favoriteMenuItems = [];
 // 当前激活的顶级菜单名称
 let currentTopLevelMenuName = null;
 
+// 顶栏操作区位置：'left' | 'right'
+let headerActionsPosition = 'right';
+
 // 恢复原始菜单显示
 function restoreOriginalMenu() {
     console.log('ERP Menu Plugin: Restoring original menu...');
+
+    // 先把原顶栏控件移回原位（必须在移除插件顶栏之前）
+    restoreHeaderActions();
     
     // 移除自定义布局元素
     const topMenuContainer = document.querySelector('.custom-top-menu-container');
@@ -197,6 +203,9 @@ function applyCustomLayout() {
     // 添加搜索功能
     addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig);
 
+    // 将原页面右上角按钮/下拉迁入插件顶栏，并隐藏原 header 行
+    relocateHeaderActions(topMenuContainer);
+
     // 添加横向菜单折叠功能（可选）- 延迟执行确保DOM渲染完成
     // 使用双重延迟确保所有元素都已渲染
     setTimeout(() => {
@@ -211,6 +220,97 @@ function applyCustomLayout() {
     }, 300);
 
     console.log('ERP Menu Plugin: Layout transformation applied successfully.');
+}
+
+// 将原 header 右上角控件迁移到插件顶栏（移动真实 DOM，保留 Vue/iView 事件）
+function relocateHeaderActions(topMenuContainer) {
+    const customContent = document.querySelector('.custom-content-con');
+    const headerCon = document.querySelector('.header-con');
+    if (!customContent) {
+        console.log('ERP Menu Plugin: .custom-content-con not found, skip header relocate.');
+        return;
+    }
+
+    // 已迁移则只更新位置
+    let wrapper = topMenuContainer.querySelector('.custom-header-actions');
+    if (!wrapper) {
+        if (!customContent.__erpPluginOriginalParent) {
+            customContent.__erpPluginOriginalParent = customContent.parentElement;
+            customContent.__erpPluginNextSibling = customContent.nextSibling;
+        }
+
+        wrapper = document.createElement('div');
+        wrapper.className = 'custom-header-actions';
+        wrapper.appendChild(customContent);
+    }
+
+    applyHeaderActionsPosition(topMenuContainer, wrapper);
+
+    if (headerCon) {
+        headerCon.classList.add('erp-plugin-hidden-header');
+        headerCon.style.display = 'none';
+        headerCon.style.height = '0';
+        headerCon.style.minHeight = '0';
+        headerCon.style.padding = '0';
+        headerCon.style.overflow = 'hidden';
+    }
+
+    console.log('ERP Menu Plugin: Header actions relocated to plugin top bar.');
+}
+
+// 按配置把操作区放到顶栏左侧或右侧
+function applyHeaderActionsPosition(topMenuContainer, wrapper) {
+    if (!topMenuContainer || !wrapper) return;
+
+    wrapper.classList.remove('position-left', 'position-right');
+    wrapper.classList.add(headerActionsPosition === 'left' ? 'position-left' : 'position-right');
+
+    if (headerActionsPosition === 'left') {
+        const searchContainer = topMenuContainer.querySelector('.menu-search-container');
+        const logo = topMenuContainer.querySelector('.custom-top-logo');
+        const insertAfter = searchContainer || logo;
+        if (insertAfter && insertAfter.nextSibling) {
+            topMenuContainer.insertBefore(wrapper, insertAfter.nextSibling);
+        } else if (insertAfter) {
+            topMenuContainer.appendChild(wrapper);
+        } else {
+            topMenuContainer.insertBefore(wrapper, topMenuContainer.firstChild);
+        }
+    } else {
+        topMenuContainer.appendChild(wrapper);
+    }
+}
+
+// 还原原顶栏控件
+function restoreHeaderActions() {
+    const customContent = document.querySelector('.custom-content-con');
+    const headerCon = document.querySelector('.header-con') || document.querySelector('.erp-plugin-hidden-header');
+    const wrapper = document.querySelector('.custom-header-actions');
+
+    if (customContent && customContent.__erpPluginOriginalParent) {
+        const parent = customContent.__erpPluginOriginalParent;
+        const next = customContent.__erpPluginNextSibling;
+        if (next && next.parentElement === parent) {
+            parent.insertBefore(customContent, next);
+        } else {
+            parent.appendChild(customContent);
+        }
+        delete customContent.__erpPluginOriginalParent;
+        delete customContent.__erpPluginNextSibling;
+    }
+
+    if (wrapper) {
+        wrapper.remove();
+    }
+
+    if (headerCon) {
+        headerCon.classList.remove('erp-plugin-hidden-header');
+        headerCon.style.display = '';
+        headerCon.style.height = '';
+        headerCon.style.minHeight = '';
+        headerCon.style.padding = '';
+        headerCon.style.overflow = '';
+    }
 }
 
 // 辅助函数：处理子菜单的折叠展开逻辑
@@ -933,10 +1033,11 @@ function highlightMatch(text, query) {
 
 // 从存储中读取开关状态
 function loadToggleState() {
-    chrome.storage.sync.get(['menuModificationEnabled'], (result) => {
+    chrome.storage.sync.get(['menuModificationEnabled', 'headerActionsPosition'], (result) => {
         const enabled = result.menuModificationEnabled !== false; // 默认为true
+        headerActionsPosition = result.headerActionsPosition === 'left' ? 'left' : 'right';
         isMenuModificationEnabled = enabled;
-        console.log('ERP Menu Plugin: Menu modification enabled:', enabled);
+        console.log('ERP Menu Plugin: Menu modification enabled:', enabled, 'header position:', headerActionsPosition);
         
         if (enabled) {
             applyCustomLayout();
@@ -959,6 +1060,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         
         sendResponse({ success: true });
+    } else if (request.action === 'setHeaderActionsPosition') {
+        headerActionsPosition = request.position === 'left' ? 'left' : 'right';
+        const topMenuContainer = document.querySelector('.custom-top-menu-container');
+        const wrapper = document.querySelector('.custom-header-actions');
+        if (topMenuContainer && wrapper && isMenuModificationEnabled) {
+            applyHeaderActionsPosition(topMenuContainer, wrapper);
+            const collapseFunc = topMenuContainer.__collapseFunc;
+            if (collapseFunc) {
+                setTimeout(collapseFunc, 50);
+            }
+        }
+        sendResponse({ success: true });
     }
     return true;
 });
@@ -971,6 +1084,14 @@ const observer = new MutationObserver((mutations) => {
     // 检查原来的菜单容器是否出现
     if (document.querySelector('.sider-memutree-conainter') && !document.querySelector('.custom-top-menu-container')) {
         applyCustomLayout();
+        return;
+    }
+
+    // 顶栏已改造，但原 header 控件晚出现时补迁
+    const topMenu = document.querySelector('.custom-top-menu-container');
+    const customContent = document.querySelector('.custom-content-con');
+    if (topMenu && customContent && !topMenu.contains(customContent)) {
+        relocateHeaderActions(topMenu);
     }
 });
 
@@ -1030,10 +1151,11 @@ function applyMenuCollapse(topMenuContainer) {
     
     // 等待DOM更新
     requestAnimationFrame(() => {
-        // 获取容器可用宽度（排除logo、搜索框、收藏标签页）
+        // 获取容器可用宽度（排除logo、搜索框、收藏标签页、顶栏操作区）
         const logo = topMenuContainer.querySelector('.custom-top-logo');
         const searchContainer = topMenuContainer.querySelector('.menu-search-container');
         const favoritesTab = topMenuContainer.querySelector('.favorites-tab');
+        const headerActions = topMenuContainer.querySelector('.custom-header-actions');
         
         const containerRect = topMenuContainer.getBoundingClientRect();
         let availableWidth = containerRect.width;
@@ -1047,6 +1169,9 @@ function applyMenuCollapse(topMenuContainer) {
         }
         if (favoritesTab) {
             availableWidth -= favoritesTab.getBoundingClientRect().width;
+        }
+        if (headerActions) {
+            availableWidth -= headerActions.getBoundingClientRect().width;
         }
         
         // 为"更多"菜单预留空间

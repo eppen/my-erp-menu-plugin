@@ -141,6 +141,76 @@
       padding: 24px;
     }
 
+    /* Mock ERP header (matches real .header-con / .custom-content-con) */
+    .header-con {
+      height: 44px;
+      background: #fff;
+      border-bottom: 1px solid #e8eaec;
+      display: flex;
+      align-items: center;
+    }
+    .header-bar {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      padding: 0 12px;
+      height: 44px;
+    }
+    .sider-trigger-a {
+      color: #515a6e;
+      text-decoration: none;
+      font-size: 18px;
+      margin-right: 12px;
+    }
+    .custom-content-con {
+      margin-left: auto;
+      display: flex;
+      flex-direction: row-reverse;
+      align-items: center;
+      gap: 8px;
+      color: #515a6e;
+      font-size: 13px;
+    }
+    .custom-content-con .full-screen-btn-con {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .user-avatar-dropdown {
+      position: relative;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+    }
+    .ivu-select-dropdown {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      background: #fff;
+      border: 1px solid #e8eaec;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      min-width: 120px;
+      z-index: 20;
+    }
+    .ivu-dropdown-menu {
+      list-style: none;
+      margin: 0;
+      padding: 4px 0;
+    }
+    .ivu-dropdown-item {
+      padding: 8px 14px;
+      cursor: pointer;
+      color: #515a6e;
+      font-size: 13px;
+    }
+    .ivu-dropdown-item:hover {
+      background: #f3f3f3;
+    }
+
     .content-card {
       background: #fff;
       border-radius: 8px;
@@ -322,6 +392,38 @@
   </div>
 
   <div class="main ivu-layout">
+    <!-- 模拟真实 ERP 顶栏（header-con / custom-content-con），启用插件后应并入蓝色顶栏 -->
+    <div class="header-con ivu-layout-header header-44">
+      <div class="header-bar">
+        <a class="sider-trigger-a" title="折叠侧栏" href="javascript:;">☰</a>
+        <div class="custom-content-con">
+          <div class="user-avatar-dropdown">
+            <div class="ivu-dropdown">
+              <div class="ivu-dropdown-rel" id="demo-user-trigger">
+                <span class="ivu-avatar">👤</span>
+                Demo管理员
+                <i class="ivu-icon ivu-icon-md-arrow-dropdown">▾</i>
+              </div>
+              <div class="ivu-select-dropdown" id="demo-user-menu" style="display:none;">
+                <ul class="ivu-dropdown-menu">
+                  <li class="ivu-dropdown-item">更改口令</li>
+                  <li class="ivu-dropdown-item">本地设置</li>
+                  <li class="ivu-dropdown-item">退出登录</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="full-screen-btn-con" title="全屏"><i class="ivu-icon">⛶</i></div>
+          <div class="full-screen-btn-con">
+            <div class="ivu-tooltip" title="消息"><i class="ivu-icon">💬</i></div>
+            <div class="ivu-tooltip" title="邮件"><i class="ivu-icon">✉️</i></div>
+            <div class="ivu-tooltip" title="工作流"><i class="ivu-icon">🔀</i></div>
+            <div class="ivu-tooltip" title="日历"><i class="ivu-icon">📅</i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="main-content-con">
       <div class="content-card">
         <div style="margin-bottom:12px">
@@ -329,13 +431,14 @@
           <span class="tag">No login required</span>
         </div>
         <h1>当前页面：<span id="page-title">仪表盘</span></h1>
-        <p class="subtitle">本页模拟真实 ERP 侧边栏 DOM，供商店审核员验证扩展功能。无需账号。</p>
+        <p class="subtitle">本页模拟真实 ERP 侧边栏与顶栏 DOM，供商店审核员验证扩展功能。无需账号。</p>
         <ol class="steps">
           <li>安装扩展 <strong>ERP Menu Layout Modifier</strong></li>
           <li>刷新本页面</li>
           <li>确认左侧深色侧边栏消失，顶部出现蓝色导航，左侧出现子菜单</li>
+          <li>确认原白色顶栏（图标/用户下拉）消失，并出现在蓝色插件顶栏右侧（可在扩展弹窗切换左侧/右侧）</li>
           <li>点击顶部不同一级菜单，左侧子菜单应切换</li>
-          <li>点击扩展图标，关闭「启用菜单调整」，刷新后应恢复左侧原始菜单</li>
+          <li>点击扩展图标，关闭「启用菜单调整」，应恢复左侧原始菜单与原顶栏</li>
           <li>（可选）缩小浏览器窗口，顶部菜单过多时应出现「更多」折叠</li>
         </ol>
         <div class="hint">
@@ -361,6 +464,19 @@
       // default highlight
       var first = document.querySelector('.ivu-menu-item');
       if (first) first.classList.add('ivu-menu-item-active', 'ivu-menu-item-selected');
+
+      // mock user dropdown
+      var userTrigger = document.getElementById('demo-user-trigger');
+      var userMenu = document.getElementById('demo-user-menu');
+      if (userTrigger && userMenu) {
+        userTrigger.addEventListener('click', function (e) {
+          e.stopPropagation();
+          userMenu.style.display = userMenu.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', function () {
+          userMenu.style.display = 'none';
+        });
+      }
     })();
   </script>
 </body>

@@ -398,3 +398,83 @@ body.custom-layout-active .ivu-layout-sider {
 .menu-item-hidden {
     display: none !important;
 }
+
+/* 原顶栏控件迁入插件顶栏 */
+.custom-header-actions {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    flex-shrink: 0;
+    padding: 0 12px;
+    gap: 4px;
+    color: #fff;
+    z-index: 10002;
+}
+
+.custom-header-actions.position-right {
+    margin-left: auto;
+}
+
+.custom-header-actions.position-left {
+    margin-left: 0;
+    margin-right: 8px;
+}
+
+/* 右侧操作区存在时，收藏不再独自 margin-left:auto，避免抢占空间 */
+.custom-top-menu-container:has(.custom-header-actions.position-right) .favorites-tab {
+    margin-left: 0;
+}
+
+.custom-top-menu-container:has(.custom-header-actions.position-right) .custom-more-menu {
+    margin-left: 0;
+}
+
+.custom-header-actions .custom-content-con {
+    display: flex !important;
+    flex-direction: row-reverse; /* 原顶栏多为 float:right，反转后视觉顺序为：图标 → 全屏 → 用户 */
+    align-items: center;
+    height: 100%;
+    float: none !important;
+    position: static !important;
+}
+
+.custom-header-actions .full-screen-btn-con {
+    display: inline-flex;
+    align-items: center;
+    color: #fff !important;
+    margin-right: 8px !important;
+}
+
+.custom-header-actions .ivu-icon,
+.custom-header-actions .user-avatar-dropdown,
+.custom-header-actions .ivu-dropdown-rel {
+    color: #fff !important;
+}
+
+.custom-header-actions .user-avatar-dropdown {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.custom-header-actions .ivu-select-dropdown {
+    z-index: 10050 !important;
+}
+
+.custom-header-actions .ivu-tooltip-popper {
+    z-index: 10050 !important;
+}
+
+/* 隐藏原 header 整行，避免插件启用后仍多占一行 */
+body.custom-layout-active .header-con,
+body.custom-layout-active .erp-plugin-hidden-header {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    border: none !important;
+    line-height: 0 !important;
+}

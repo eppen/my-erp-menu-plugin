@@ -1,11 +1,14 @@
 // 获取DOM元素
 const toggleSwitch = document.getElementById('toggleSwitch');
 const statusText = document.getElementById('statusText');
+const headerPositionSelect = document.getElementById('headerPositionSelect');
 
 // 从存储中读取开关状态，默认为true（启用）
 function loadToggleState() {
-  chrome.storage.sync.get(['menuModificationEnabled'], (result) => {
+  chrome.storage.sync.get(['menuModificationEnabled', 'headerActionsPosition'], (result) => {
     const isEnabled = result.menuModificationEnabled !== false; // 默认为true
+    const position = result.headerActionsPosition === 'left' ? 'left' : 'right';
+    headerPositionSelect.value = position;
     updateUI(isEnabled);
   });
 }
@@ -21,6 +24,7 @@ function updateUI(isEnabled) {
     statusText.textContent = '菜单调整已禁用';
     statusText.style.color = '#999';
   }
+  headerPositionSelect.disabled = !isEnabled;
 }
 
 // 切换开关状态
@@ -45,8 +49,24 @@ function toggleState() {
   });
 }
 
+// 顶栏按钮左右位置
+function changeHeaderPosition() {
+  const position = headerPositionSelect.value === 'left' ? 'left' : 'right';
+  chrome.storage.sync.set({ headerActionsPosition: position }, () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          action: 'setHeaderActionsPosition',
+          position: position
+        });
+      }
+    });
+  });
+}
+
 // 绑定点击事件
 toggleSwitch.addEventListener('click', toggleState);
+headerPositionSelect.addEventListener('change', changeHeaderPosition);
 
 // 页面加载时读取状态
 loadToggleState();

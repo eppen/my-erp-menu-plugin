@@ -14,7 +14,9 @@ let headerActionsPosition = 'right';
 let lastSyncedTagKey = null;
 let tagNavObserver = null;
 let tagNavSyncTimer = null;
+let tagNavPollTimer = null;
 let tagNavObservedRoot = null;
+let pendingSyncInfo = null;
 
 // 恢复原始菜单显示
 function restoreOriginalMenu() {
@@ -39,6 +41,7 @@ function restoreOriginalMenu() {
     document.body.classList.remove('custom-layout-active');
 
     lastSyncedTagKey = null;
+    pendingSyncInfo = null;
     if (tagNavObserver) {
         tagNavObserver.disconnect();
         tagNavObserver = null;
@@ -501,7 +504,7 @@ function syncLeftMenuToActiveTab(forcedInfo) {
     if (!isMenuModificationEnabled) return false;
     if (!document.querySelector('.custom-top-menu-container')) return false;
 
-    const info = forcedInfo || getActiveTagInfo();
+    const info = forcedInfo || pendingSyncInfo || getActiveTagInfo();
     if (!info || !info.title) return false;
 
     const match = findMenuMatchForTitle(info.title);
@@ -516,21 +519,42 @@ function syncLeftMenuToActiveTab(forcedInfo) {
     return true;
 }
 
+function resolveTagInfoForSync() {
+    const active = getActiveTagInfo();
+    if (pendingSyncInfo) {
+        if (active && active.key === pendingSyncInfo.key) {
+            pendingSyncInfo = null;
+            return active;
+        }
+        return pendingSyncInfo;
+    }
+    return active;
+}
+
 function scheduleTagNavSync(forcedInfo) {
+    if (forcedInfo) {
+        pendingSyncInfo = forcedInfo;
+    }
     if (tagNavSyncTimer) clearTimeout(tagNavSyncTimer);
     tagNavSyncTimer = setTimeout(() => {
-        const info = forcedInfo || getActiveTagInfo();
+        const info = resolveTagInfoForSync();
         if (!info) return;
         if (info.key && info.key === lastSyncedTagKey) return;
         syncLeftMenuToActiveTab(info);
-    }, 40);
+    }, 0);
 }
 
 function onTagNavClick(e) {
     if (!isMenuModificationEnabled) return;
     const tag = e.target && e.target.closest && e.target.closest('.tags-nav .ivu-tag');
     if (!tag) return;
-    scheduleTagNavSync(parseTagEl(tag));
+    if (e.target.closest('.ivu-icon-ios-close, .ivu-icon-ios-close-circle, .ivu-icon-ios-close-circle-outline')) {
+        return;
+    }
+    const info = parseTagEl(tag);
+    if (!info) return;
+    pendingSyncInfo = info;
+    syncLeftMenuToActiveTab(info);
 }
 
 function initTagNavSync() {
@@ -565,7 +589,7 @@ function initTagNavSync() {
         tagNavPollTimer = setInterval(() => {
             if (!isMenuModificationEnabled) return;
             if (!document.querySelector('.custom-top-menu-container')) return;
-            const info = getActiveTagInfo();
+            const info = resolveTagInfoForSync();
             if (info && info.key && info.key !== lastSyncedTagKey) {
                 syncLeftMenuToActiveTab(info);
             }

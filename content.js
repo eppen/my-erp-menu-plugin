@@ -352,17 +352,20 @@ function parseTagEl(tag) {
     const textEl = tag.querySelector('.ivu-tag-text');
     let title = normalizeMenuText(textEl ? textEl.innerText : tag.innerText);
     let name = tag.id ? tag.id.replace(/^tag-nav-/, '') : '';
+    let href = '';
     try {
         const vue = tag.__vue__;
         const item = vue && vue.$attrs && vue.$attrs['data-route-item'];
         if (item) {
             if (item.title) title = normalizeMenuText(item.title);
             if (item.name) name = item.name;
+            if (item.key && item.key !== item.name) name = name || item.key;
+            if (item.href) href = String(item.href);
         }
     } catch (e) {}
     const key = tag.id || name || title;
     if (!title && !key) return null;
-    return { title, name, id: tag.id || '', key };
+    return { title, name, href, id: tag.id || '', key };
 }
 
 function getActiveTagInfo() {
@@ -411,8 +414,13 @@ function findMenuMatchForTitle(title) {
 
     if (candidates.length === 0) return null;
     candidates.sort((a, b) => b.score - a.score);
-    if (candidates[0].score < 100) {
-        const preferCurrent = candidates.find(c => c.topLevelMenu === currentTopLevelMenuName && c.score === candidates[0].score);
+    const topScore = candidates[0].score;
+    const topHits = candidates.filter(c => c.score === topScore);
+    if (topHits.length > 1 && topScore >= 100) {
+        return null;
+    }
+    if (topScore < 100) {
+        const preferCurrent = candidates.find(c => c.topLevelMenu === currentTopLevelMenuName && c.score === topScore);
         return preferCurrent || candidates[0];
     }
     return candidates[0];
@@ -523,7 +531,7 @@ function syncLeftMenuToActiveTab(forcedInfo) {
     const info = forcedInfo || pendingSyncInfo || getActiveTagInfo();
     if (!info || !info.title) return false;
 
-    const match = findMenuMatchForTitle(info.title);
+    const match = findMenuMatchForTag(info);
     if (!match || !match.topLevelMenu) return false;
 
     lastSyncedTagKey = info.key || info.title;
@@ -538,7 +546,7 @@ function syncLeftMenuToActiveTab(forcedInfo) {
 function resolveTagInfoForSync() {
     const active = getActiveTagInfo();
     if (pendingSyncInfo) {
-        if (active && (active.key === pendingSyncInfo.key || active.title === pendingSyncInfo.title)) {
+        if (active && active.key && active.key === pendingSyncInfo.key) {
             pendingSyncInfo = null;
             return active;
         }
@@ -833,31 +841,52 @@ function findOriginalMenuItem(text, path = [], topLevelMenuName = null) {
     return null;
 }
 
+function isLikelyRouteId(value) {
+    if (value === undefined || value === null) return false;
+    const s = String(value).trim();
+    if (!s) return false;
+    const skip = /^(menu|imenuitem|menuitem|submenu|imenusubmenu|submenuitem|i-menu|i-menu-item|i-submenu)$/i;
+    return !skip.test(s);
+}
+
 function getMenuItemRouteInfo(el) {
     if (!el) return null;
     const info = { name: '', key: '', href: '', title: '' };
+    const takeName = (v) => {
+        if (!isLikelyRouteId(v)) return;
+        const s = String(v);
+        if (!info.name) info.name = s;
+    };
+    const takeHref = (v) => {
+        if (v && typeof v === 'string' && !info.href) info.href = v;
+    };
     try {
         let node = el;
-        for (let d = 0; d < 5 && node; d++) {
+        for (let d = 0; d < 6 && node; d++) {
             const vue = node.__vue__;
             if (vue) {
-                const propName = vue.$props && vue.$props.name;
-                if (typeof vue.name === 'string' && vue.name) info.name = info.name || vue.name;
-                if (typeof propName === 'string' && propName) info.name = info.name || propName;
-
-                const item = vue.item || (vue.$attrs && (vue.$attrs.item || vue.$attrs['data-route-item']));
+                if (vue.$props) {
+                    takeName(vue.$props.name);
+                    takeHref(vue.$props.href || vue.$props.url);
+                }
+                if (vue.$options && vue.$options.propsData) {
+                    takeName(vue.$options.propsData.name);
+                }
+                const item = vue.item
+                    || (vue.$attrs && (vue.$attrs.item || vue.$attrs['data-route-item']))
+                    || vue.menuItem;
                 if (item && typeof item === 'object') {
-                    info.name = info.name || item.name || '';
-                    info.key = info.key || item.key || '';
-                    info.href = info.href || item.href || item.path || item.url || '';
-                    info.title = info.title || item.title || '';
+                    takeName(item.name);
+                    takeName(item.key);
+                    takeHref(item.href || item.path || item.url);
+                    if (item.title && !info.title) info.title = String(item.title);
                 }
                 const to = vue.to || (vue.$props && vue.$props.to);
                 if (to) {
-                    if (typeof to === 'string') info.href = info.href || to;
+                    if (typeof to === 'string') takeHref(to);
                     else {
-                        info.href = info.href || to.path || to.href || '';
-                        info.name = info.name || to.name || '';
+                        takeHref(to.path || to.href);
+                        takeName(to.name);
                     }
                 }
             }
@@ -883,6 +912,48 @@ function hrefLooseEqual(a, b) {
     const na = String(a).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
     const nb = String(b).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
     return na === nb || na.endsWith(nb) || nb.endsWith(na);
+}
+
+function findOriginalMenuItemByRoute(route) {
+    if (!route || (!route.name && !route.href && !route.key)) return null;
+    const names = [route.name, route.key].filter(isLikelyRouteId).map(String);
+    const topLevelItems = getOriginalTopLevelItems();
+    let best = null;
+    let bestScore = 0;
+    topLevelItems.forEach(topLi => {
+        const topTitle = getTopLevelTitleFromLi(topLi);
+        topLi.querySelectorAll('.ivu-menu-item').forEach(item => {
+            const r = getMenuItemRouteInfo(item);
+            if (!r) return;
+            let score = 0;
+            names.forEach(n => {
+                if (r.name === n || r.key === n) score += 100;
+            });
+            if (hrefLooseEqual(route.href, r.href)) score += 90;
+            if (score > bestScore) {
+                bestScore = score;
+                best = {
+                    text: normalizeMenuText(item.innerText),
+                    topLevelMenu: topTitle
+                };
+            }
+        });
+    });
+    if (best && bestScore >= 90) return best;
+    return null;
+}
+
+function findMenuMatchForTag(info) {
+    if (!info) return null;
+    const byRoute = findOriginalMenuItemByRoute({
+        name: info.name || '',
+        key: info.id ? info.id.replace(/^tag-nav-/, '') : '',
+        href: info.href || ''
+    });
+    if (byRoute) return byRoute;
+    const byTitle = findMenuMatchForTitle(info.title);
+    if (byTitle) return byTitle;
+    return null;
 }
 
 function activateExistingTagByRoute(route, title) {

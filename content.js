@@ -876,21 +876,27 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
         }, 300);
     });
     
-    // 键盘快捷键 Ctrl+K 聚焦搜索框
+    // 键盘快捷键 Ctrl+K 聚焦搜索框；ESC 关闭搜索浮层
     document.addEventListener('keydown', (e) => {
         // Ctrl+K 或 Cmd+K
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
             e.preventDefault();
             searchInput.focus();
             searchInput.select();
+            return;
         }
-        // ESC 键清除搜索并关闭悬浮层
-        if (e.key === 'Escape' && (document.activeElement === searchInput || searchDropdown.style.display !== 'none')) {
-            searchInput.value = '';
-            searchInput.blur();
-            hideSearchDropdown();
+        // ESC：只要浮层开着就关闭（不依赖输入框焦点，捕获阶段优先于页面其它逻辑）
+        if (e.key === 'Escape' || e.key === 'Esc') {
+            const dropdownOpen = searchDropdown.style.display !== 'none' && searchDropdown.style.display !== '';
+            if (dropdownOpen || document.activeElement === searchInput || searchInput.value.trim() !== '') {
+                e.preventDefault();
+                e.stopPropagation();
+                searchInput.value = '';
+                searchInput.blur();
+                hideSearchDropdown();
+            }
         }
-    });
+    }, true);
     
     // 点击搜索框/悬浮层外部时关闭悬浮层
     document.addEventListener('click', (e) => {

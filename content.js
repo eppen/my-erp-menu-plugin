@@ -21,6 +21,10 @@ const PENDING_SYNC_TTL = 2000;
 // 收藏/搜索等已按菜单项同步左侧后，挂起自动 tab→菜单同步，直到用户手动点 tab
 let autoTagSyncSuspended = false;
 let suspendedMenuHint = null;
+// 菜单/搜索/收藏打开时记录的 tab 上下文，供反向同步优先使用
+const tabContextMap = Object.create(null);
+const TAB_CONTEXT_MAX = 200;
+const TAB_CONTEXT_TTL = 30 * 60 * 1000;
 
 function setPendingSyncInfo(info) {
     if (!info) return;
@@ -41,11 +45,149 @@ function resumeAutoTagSync() {
     suspendedMenuHint = null;
 }
 
+function normalizeHrefKey(href) {
+    if (!href) return '';
+    return String(href).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
+}
+
+// 生成索引 key。不含 title（同名页面会互相覆盖），只使用较稳定的 id/name/key/href
+function tabContextIndexKeys(ctx) {
+    const keys = [];
+    if (!ctx) return keys;
+    if (ctx.id) keys.push('id:' + ctx.id);
+    if (ctx.name) {
+        keys.push('name:' + ctx.name);
+        keys.push('key:' + ctx.name);
+    }
+    if (ctx.key) {
+        keys.push('key:' + ctx.key);
+        keys.push('name:' + ctx.key);
+        if (String(ctx.key).indexOf('tag-nav-') === 0) {
+            const stripped = String(ctx.key).replace(/^tag-nav-/, '');
+            if (stripped) {
+                keys.push('key:' + stripped);
+                keys.push('name:' + stripped);
+            }
+        }
+    }
+    if (ctx.id && String(ctx.id).indexOf('tag-nav-') === 0) {
+        const stripped = String(ctx.id).replace(/^tag-nav-/, '');
+        if (stripped) {
+            keys.push('key:' + stripped);
+            keys.push('name:' + stripped);
+        }
+    }
+    const hrefKey = normalizeHrefKey(ctx.href);
+    if (hrefKey) keys.push('href:' + hrefKey);
+    return Array.from(new Set(keys));
+}
+
+function forgetTabContextEntry(entry) {
+    if (!entry || !entry._keys) return;
+    entry._keys.forEach(k => {
+        if (tabContextMap[k] === entry) delete tabContextMap[k];
+    });
+    entry._keys = [];
+}
+
+function pruneTabContextMap() {
+    const now = Date.now();
+    const unique = [];
+    const seen = new Set();
+    Object.keys(tabContextMap).forEach(k => {
+        const hit = tabContextMap[k];
+        if (!hit) { delete tabContextMap[k]; return; }
+        if (seen.has(hit)) return;
+        seen.add(hit);
+        if (now - hit._ts > TAB_CONTEXT_TTL) {
+            forgetTabContextEntry(hit);
+            return;
+        }
+        unique.push(hit);
+    });
+    if (unique.length <= TAB_CONTEXT_MAX) return;
+    unique.sort((a, b) => a._ts - b._ts);
+    unique.slice(0, unique.length - TAB_CONTEXT_MAX).forEach(forgetTabContextEntry);
+}
+
+function rememberTabContext(ctx) {
+    if (!ctx || !ctx.topLevelMenu) return;
+    const entry = {
+        topLevelMenu: ctx.topLevelMenu,
+        text: ctx.text || ctx.title || '',
+        title: ctx.title || ctx.text || '',
+        name: ctx.name || '',
+        key: ctx.key || '',
+        href: ctx.href || '',
+        id: ctx.id || '',
+        _ts: Date.now(),
+        _keys: []
+    };
+    const newKeys = tabContextIndexKeys(entry);
+    // 精确删除将要被覆盖的旧 entry（含同身份 / 同索引冲突）
+    const toForget = new Set();
+    const prev = lookupTabContext(ctx);
+    if (prev) toForget.add(prev);
+    newKeys.forEach(k => {
+        const hit = tabContextMap[k];
+        if (hit) toForget.add(hit);
+    });
+    toForget.forEach(forgetTabContextEntry);
+
+    entry._keys = newKeys;
+    newKeys.forEach(k => {
+        tabContextMap[k] = entry;
+    });
+    pruneTabContextMap();
+}
+
+function lookupTabContext(info) {
+    if (!info) return null;
+    const keys = tabContextIndexKeys({
+        id: info.id || '',
+        name: info.name || '',
+        key: info.key || '',
+        href: info.href || ''
+    });
+    for (let i = 0; i < keys.length; i++) {
+        const hit = tabContextMap[keys[i]];
+        if (hit && hit.topLevelMenu) return hit;
+    }
+    return null;
+}
+
+function rebindTabContextFromTag(info) {
+    if (!info) return;
+    let base = lookupTabContext(info);
+    if (!base && suspendedMenuHint && info.title && info.title === suspendedMenuHint.title) {
+        base = {
+            topLevelMenu: suspendedMenuHint.topLevelMenu,
+            text: suspendedMenuHint.text,
+            title: suspendedMenuHint.title
+        };
+    }
+    if (!base || !base.topLevelMenu) return;
+    rememberTabContext({
+        topLevelMenu: base.topLevelMenu,
+        text: base.text || info.title || '',
+        title: info.title || base.title || '',
+        name: info.name || base.name || '',
+        key: info.key || base.key || '',
+        href: info.href || base.href || '',
+        id: info.id || base.id || ''
+    });
+}
+
 function adoptActiveTagKeyIfMatchesHint(info) {
     if (!info || !suspendedMenuHint) return;
     if (info.title && info.title === suspendedMenuHint.title) {
         lastSyncedTagKey = info.key || info.title || lastSyncedTagKey;
+        rebindTabContextFromTag(info);
     }
+}
+
+function clearTabContextMap() {
+    Object.keys(tabContextMap).forEach(k => { delete tabContextMap[k]; });
 }
 
 // 恢复原始菜单显示
@@ -73,6 +215,7 @@ function restoreOriginalMenu() {
     lastSyncedTagKey = null;
     pendingSyncInfo = null;
     resumeAutoTagSync();
+    clearTabContextMap();
     if (tagNavObserver) {
         tagNavObserver.disconnect();
         tagNavObserver = null;
@@ -566,6 +709,11 @@ function syncLeftMenuFromMenuItem(topLevelMenu, itemText) {
     if (!topLevelMenu) return false;
     // 已知正确模块：挂起自动同步，防止随后 tab 观察/轮询按歧义标题切错
     suspendAutoTagSync(topLevelMenu, itemText);
+    rememberTabContext({
+        topLevelMenu,
+        text: itemText || topLevelMenu,
+        title: itemText || topLevelMenu
+    });
     setPendingSyncInfo({
         title: itemText || topLevelMenu,
         name: '',
@@ -580,7 +728,7 @@ function syncLeftMenuFromMenuItem(topLevelMenu, itemText) {
     return true;
 }
 
-// 按当前内容 tab 同步左侧：仅路由唯一命中时才切模块；否则不切模块，只尝试高亮
+// 按当前内容 tab 同步左侧：优先 tabContextMap，其次唯一路由；否则不切模块
 function syncLeftMenuToActiveTab(forcedInfo) {
     if (!isMenuModificationEnabled) return false;
     if (!document.querySelector('.custom-top-menu-container')) return false;
@@ -588,11 +736,29 @@ function syncLeftMenuToActiveTab(forcedInfo) {
     const info = forcedInfo || pendingSyncInfo || getActiveTagInfo();
     if (!info || !info.title) return false;
 
-    const routeMatch = findMenuMatchForTag(info);
-
     lastSyncedTagKey = info.key || info.title;
 
+    const cached = lookupTabContext(info);
+    if (cached && cached.topLevelMenu) {
+        rebindTabContextFromTag(info);
+        activateTopLevelMenu(cached.topLevelMenu);
+        if (cached.text) {
+            setTimeout(() => highlightLeftMenuItem(cached.text), 40);
+        }
+        return true;
+    }
+
+    const routeMatch = findMenuMatchForTag(info);
     if (routeMatch && routeMatch.topLevelMenu) {
+        rememberTabContext({
+            topLevelMenu: routeMatch.topLevelMenu,
+            text: routeMatch.text || info.title,
+            title: info.title,
+            name: info.name || '',
+            key: info.key || '',
+            href: info.href || '',
+            id: info.id || ''
+        });
         activateTopLevelMenu(routeMatch.topLevelMenu);
         if (routeMatch.text) {
             setTimeout(() => highlightLeftMenuItem(routeMatch.text), 40);
@@ -600,7 +766,7 @@ function syncLeftMenuToActiveTab(forcedInfo) {
         return true;
     }
 
-    // 无唯一路由命中：绝不按标题切模块，仅在当前已打开的模块里按标题高亮
+    // 无缓存、无唯一路由：绝不按标题切模块，仅在当前模块里尝试高亮
     if (info.title) {
         setTimeout(() => highlightLeftMenuItem(info.title), 40);
     }
@@ -629,7 +795,7 @@ function syncLeftMenuToActiveTab(forcedInfo) {
             }
             : null;
     }
-    console.warn('ERP Menu Plugin: Tab reverse sync skipped module switch (no unique route)', payload);
+    console.warn('ERP Menu Plugin: Tab reverse sync skipped module switch (no context/route)', payload);
     return false;
 }
 
@@ -642,6 +808,7 @@ function resolveTagInfoForSync() {
         if (sameKey || sameTitle) {
             // 收藏/搜索等已按菜单项同步过左侧；tab 出现后只对齐 key，避免再按路由/标题重匹配切错模块
             lastSyncedTagKey = active.key || active.title || lastSyncedTagKey;
+            rebindTabContextFromTag(active);
             pendingSyncInfo = null;
             return null;
         }
@@ -650,6 +817,7 @@ function resolveTagInfoForSync() {
         // TTL 到期且标题仍一致：同样只对齐 key，不触发重匹配
         if (active && pendingSyncInfo.title && active.title === pendingSyncInfo.title) {
             lastSyncedTagKey = active.key || active.title || lastSyncedTagKey;
+            rebindTabContextFromTag(active);
             pendingSyncInfo = null;
             return null;
         }
@@ -1117,7 +1285,17 @@ function openFavorite(fav) {
     const topMenu = fav.path && fav.path.length > 0 ? fav.path[0] : null;
     const subPath = fav.path && fav.path.length > 1 ? fav.path.slice(1) : [];
     // 先挂起自动同步，再打开（避免 tag.click 抢先按歧义标题切错左侧）
-    if (topMenu) suspendAutoTagSync(topMenu, fav.text);
+    if (topMenu) {
+        suspendAutoTagSync(topMenu, fav.text);
+        rememberTabContext({
+            topLevelMenu: topMenu,
+            text: fav.text,
+            title: fav.text,
+            name: fav.routeName || '',
+            key: fav.routeKey || '',
+            href: fav.routeHref || ''
+        });
+    }
     triggerOriginalClick(fav.text, subPath, topMenu);
     if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
 }
@@ -1128,7 +1306,18 @@ function triggerOriginalClick(text, path = [], topLevelMenuName = null) {
         console.warn('ERP Menu Plugin: Could not find menu item:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
         return;
     }
-    const route = getMenuItemRouteInfo(item);
+    const route = getMenuItemRouteInfo(item) || {};
+    const topMenu = topLevelMenuName || currentTopLevelMenuName || '';
+    if (topMenu) {
+        rememberTabContext({
+            topLevelMenu: topMenu,
+            text,
+            title: text,
+            name: route.name || '',
+            key: route.key || '',
+            href: route.href || ''
+        });
+    }
     if (activateExistingTagByRoute(route, text)) return;
     item.click();
 }

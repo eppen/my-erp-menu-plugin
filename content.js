@@ -1212,10 +1212,10 @@ function applyMenuCollapse(topMenuContainer) {
                 item.classList.add('menu-item-hidden');
             });
             
-            // 创建"更多"菜单按钮
+            // 创建"更多"菜单按钮（样式与左侧模块菜单项一致）
             const moreMenu = document.createElement('div');
             moreMenu.className = 'custom-top-menu-item custom-more-menu';
-            moreMenu.innerHTML = '<span>更多</span><i class="ivu-icon ivu-icon-ios-arrow-down" style="margin-left: 4px; font-size: 12px; transition: transform 0.3s;"></i>';
+            moreMenu.innerHTML = '<i class="ivu-icon ivu-icon-ios-more"></i><span>更多</span><i class="ivu-icon ivu-icon-ios-arrow-down custom-more-arrow"></i>';
             moreMenu.title = `更多菜单 (${itemsToCollapse.length}项)`;
             
             // 创建下拉菜单容器
@@ -1250,7 +1250,7 @@ function applyMenuCollapse(topMenuContainer) {
                         originalItem.click();
                     }
                     dropdownMenu.style.display = 'none';
-                    const arrow = moreMenu.querySelector('i');
+                    const arrow = moreMenu.querySelector('.custom-more-arrow');
                     if (arrow) {
                         arrow.style.transform = 'rotate(0deg)';
                     }
@@ -1266,7 +1266,7 @@ function applyMenuCollapse(topMenuContainer) {
                 dropdownMenu.style.display = isVisible ? 'none' : 'block';
                 
                 // 更新箭头方向
-                const arrow = moreMenu.querySelector('i');
+                const arrow = moreMenu.querySelector('.custom-more-arrow');
                 if (arrow) {
                     arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
                 }
@@ -1276,7 +1276,7 @@ function applyMenuCollapse(topMenuContainer) {
             const closeDropdown = (e) => {
                 if (!moreMenu.contains(e.target)) {
                     dropdownMenu.style.display = 'none';
-                    const arrow = moreMenu.querySelector('i');
+                    const arrow = moreMenu.querySelector('.custom-more-arrow');
                     if (arrow) {
                         arrow.style.transform = 'rotate(0deg)';
                     }

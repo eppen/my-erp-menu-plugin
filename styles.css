@@ -354,7 +354,15 @@ body.custom-layout-active .ivu-layout-sider {
 /* 横向菜单折叠功能样式 */
 .custom-more-menu {
     position: relative;
-    margin-left: auto; /* 将"更多"菜单推到右侧 */
+    margin-left: 0; /* 紧跟左侧可见模块，不单独甩到最右侧 */
+    flex-shrink: 0;
+}
+
+.custom-more-menu .custom-more-arrow {
+    margin-left: 4px;
+    margin-right: 0;
+    font-size: 14px;
+    transition: transform 0.3s;
 }
 
 .custom-more-dropdown {
@@ -426,13 +434,9 @@ body.custom-layout-active .ivu-layout-sider {
     margin-left: 0;
 }
 
-/* 有「更多」时：更多靠右推开，操作区在更多之后（最右侧） */
-.custom-top-menu-container:has(.custom-header-actions.position-right):has(.custom-more-menu) .custom-more-menu {
-    margin-left: auto;
-}
-
+/* 有「更多」时：操作区仍靠最右侧，「更多」留在模块菜单旁 */
 .custom-top-menu-container:has(.custom-header-actions.position-right):has(.custom-more-menu) .custom-header-actions.position-right {
-    margin-left: 0;
+    margin-left: auto;
 }
 
 .custom-header-actions .custom-content-con {

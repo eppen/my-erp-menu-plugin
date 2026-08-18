@@ -18,10 +18,34 @@ let tagNavPollTimer = null;
 let tagNavObservedRoot = null;
 let pendingSyncInfo = null;
 const PENDING_SYNC_TTL = 2000;
+// 收藏/搜索等已按菜单项同步左侧后，挂起自动 tab→菜单同步，直到用户手动点 tab
+let autoTagSyncSuspended = false;
+let suspendedMenuHint = null;
 
 function setPendingSyncInfo(info) {
     if (!info) return;
     pendingSyncInfo = Object.assign({}, info, { _ts: Date.now() });
+}
+
+function suspendAutoTagSync(topLevelMenu, itemText) {
+    autoTagSyncSuspended = true;
+    suspendedMenuHint = {
+        title: itemText || topLevelMenu || '',
+        topLevelMenu: topLevelMenu || '',
+        text: itemText || ''
+    };
+}
+
+function resumeAutoTagSync() {
+    autoTagSyncSuspended = false;
+    suspendedMenuHint = null;
+}
+
+function adoptActiveTagKeyIfMatchesHint(info) {
+    if (!info || !suspendedMenuHint) return;
+    if (info.title && info.title === suspendedMenuHint.title) {
+        lastSyncedTagKey = info.key || info.title || lastSyncedTagKey;
+    }
 }
 
 // 恢复原始菜单显示
@@ -48,6 +72,7 @@ function restoreOriginalMenu() {
 
     lastSyncedTagKey = null;
     pendingSyncInfo = null;
+    resumeAutoTagSync();
     if (tagNavObserver) {
         tagNavObserver.disconnect();
         tagNavObserver = null;
@@ -539,6 +564,8 @@ function activateTopLevelMenu(topLevelMenuName) {
 
 function syncLeftMenuFromMenuItem(topLevelMenu, itemText) {
     if (!topLevelMenu) return false;
+    // 已知正确模块：挂起自动同步，防止随后 tab 观察/轮询按歧义标题切错
+    suspendAutoTagSync(topLevelMenu, itemText);
     setPendingSyncInfo({
         title: itemText || topLevelMenu,
         name: '',
@@ -606,11 +633,19 @@ function resolveTagInfoForSync() {
         const sameKey = active.key && active.key === pendingSyncInfo.key;
         const sameTitle = active.title && active.title === pendingSyncInfo.title;
         if (sameKey || sameTitle) {
+            // 收藏/搜索等已按菜单项同步过左侧；tab 出现后只对齐 key，避免再按路由/标题重匹配切错模块
+            lastSyncedTagKey = active.key || active.title || lastSyncedTagKey;
             pendingSyncInfo = null;
-            return active;
+            return null;
         }
     }
     if (Date.now() - pendingSyncInfo._ts > PENDING_SYNC_TTL) {
+        // TTL 到期且标题仍一致：同样只对齐 key，不触发重匹配
+        if (active && pendingSyncInfo.title && active.title === pendingSyncInfo.title) {
+            lastSyncedTagKey = active.key || active.title || lastSyncedTagKey;
+            pendingSyncInfo = null;
+            return null;
+        }
         pendingSyncInfo = null;
         return active;
     }
@@ -623,6 +658,10 @@ function scheduleTagNavSync(forcedInfo) {
     }
     if (tagNavSyncTimer) clearTimeout(tagNavSyncTimer);
     tagNavSyncTimer = setTimeout(() => {
+        if (autoTagSyncSuspended) {
+            adoptActiveTagKeyIfMatchesHint(getActiveTagInfo());
+            return;
+        }
         const info = resolveTagInfoForSync();
         if (!info) return;
         if (info.key && info.key === lastSyncedTagKey) return;
@@ -635,6 +674,12 @@ function onTagNavClick(e) {
     const tag = e.target && e.target.closest && e.target.closest('.tags-nav .ivu-tag');
     if (!tag) return;
     if (e.target.closest('.ivu-icon-ios-close, .ivu-icon-ios-close-circle, .ivu-icon-ios-close-circle-outline')) {
+        return;
+    }
+    // 仅用户真实点击才恢复自动同步；程序触发的 tag.click() 不解除挂起
+    if (e.isTrusted) {
+        resumeAutoTagSync();
+    } else if (autoTagSyncSuspended) {
         return;
     }
     const info = parseTagEl(tag);
@@ -675,6 +720,10 @@ function initTagNavSync() {
         tagNavPollTimer = setInterval(() => {
             if (!isMenuModificationEnabled) return;
             if (!document.querySelector('.custom-top-menu-container')) return;
+            if (autoTagSyncSuspended) {
+                adoptActiveTagKeyIfMatchesHint(getActiveTagInfo());
+                return;
+            }
             const info = resolveTagInfoForSync();
             if (info && info.key && info.key !== lastSyncedTagKey) {
                 syncLeftMenuToActiveTab(info);
@@ -766,7 +815,9 @@ function initSubMenuInteractions(rootElement, topLevelMenuName = null) {
              
              // 使用顶级菜单名称+路径+文本进行精确匹配
              const topMenu = topLevelMenuName || currentTopLevelMenuName;
+             if (topMenu) suspendAutoTagSync(topMenu, itemText);
              triggerOriginalClick(itemText, itemPath, topMenu);
+             if (topMenu) syncLeftMenuFromMenuItem(topMenu, itemText);
         });
     });
 }
@@ -1061,7 +1112,8 @@ function activateExistingTagByRoute(route, title) {
 function openFavorite(fav) {
     const topMenu = fav.path && fav.path.length > 0 ? fav.path[0] : null;
     const subPath = fav.path && fav.path.length > 1 ? fav.path.slice(1) : [];
-    // 与搜索浮层点击保持一致：直接触发原始菜单项，再同步左侧
+    // 先挂起自动同步，再打开（避免 tag.click 抢先按歧义标题切错左侧）
+    if (topMenu) suspendAutoTagSync(topMenu, fav.text);
     triggerOriginalClick(fav.text, subPath, topMenu);
     if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
 }
@@ -1553,6 +1605,7 @@ function displaySearchResults(results, searchDropdown, query) {
         
         li.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (result.topLevelMenu) suspendAutoTagSync(result.topLevelMenu, result.text);
             triggerOriginalClick(result.text, result.path.slice(1), result.topLevelMenu);
             syncLeftMenuFromMenuItem(result.topLevelMenu, result.text);
 

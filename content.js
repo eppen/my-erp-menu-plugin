@@ -1566,7 +1566,6 @@ function showFavoritesList(favoritesDropdown, hideFavoritesDropdown) {
         li.querySelector('.favorite-item-main').addEventListener('click', (e) => {
             e.stopPropagation();
             openFavorite(fav);
-            if (typeof hideFavoritesDropdown === 'function') hideFavoritesDropdown();
         });
 
         li.querySelector('.favorite-btn').addEventListener('click', (e) => {

@@ -323,12 +323,39 @@ body.custom-layout-active .ivu-layout-sider {
     font-weight: bold;
 }
 
-/* 收藏标签页样式 */
+/* 收藏入口与悬浮层（挂在收藏按钮下方，不占用左侧菜单） */
 .favorites-tab {
-    margin-left: auto; /* 将收藏标签页推到右侧 */
+    margin-left: auto;
+    position: relative;
 }
 
-/* 收藏列表样式 */
+.favorites-tab.favorites-open {
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.favorites-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    left: auto;
+    min-width: 320px;
+    max-width: 480px;
+    max-height: 420px;
+    overflow-y: auto;
+    background-color: #2d8cf0;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    z-index: 10060;
+}
+
+.favorites-dropdown-header {
+    padding: 10px 15px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    line-height: 1.5;
+}
+
 .favorites-list {
     list-style: none;
     padding: 0;
@@ -337,31 +364,42 @@ body.custom-layout-active .ivu-layout-sider {
 
 .favorite-item {
     position: relative;
-    padding: 10px 15px 10px 15px !important;
+    padding: 12px 15px !important;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .favorite-item:hover {
-    background-color: rgba(255,255,255,0.1) !important;
+    background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.favorite-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.favorite-item-path {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-bottom: 4px;
 }
 
 .favorite-item-text {
-    flex: 1;
-    color: rgba(255,255,255,0.7);
-    transition: color 0.2s;
-}
-
-.favorite-item:hover .favorite-item-text {
-    color: #fff;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .favorite-item .favorite-btn {
     position: static;
     transform: none;
-    margin-left: 10px;
+    margin-left: 0;
+    flex-shrink: 0;
 }
 
 .favorite-item .favorite-btn:hover {

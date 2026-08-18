@@ -17,6 +17,12 @@ let tagNavSyncTimer = null;
 let tagNavPollTimer = null;
 let tagNavObservedRoot = null;
 let pendingSyncInfo = null;
+const PENDING_SYNC_TTL = 2000;
+
+function setPendingSyncInfo(info) {
+    if (!info) return;
+    pendingSyncInfo = Object.assign({}, info, { _ts: Date.now() });
+}
 
 // 恢复原始菜单显示
 function restoreOriginalMenu() {
@@ -208,9 +214,9 @@ function applyCustomLayout() {
         topMenuContainer.appendChild(topMenuItem);
     });
 
-    // 加载收藏列表并添加收藏菜单标签页
+    // 加载收藏列表并添加收藏菜单（浮层，不占用左侧子菜单）
     loadFavorites(() => {
-        addFavoritesTab(topMenuContainer, subMenuContainer);
+        addFavoritesTab(topMenuContainer);
     });
 
     // 添加搜索功能
@@ -347,6 +353,31 @@ function getTopLevelTitleFromLi(topLi) {
     return normalizeMenuText(span ? span.innerText : el.innerText);
 }
 
+function getTagRouteItem(tag) {
+    if (!tag) return null;
+    try {
+        let node = tag;
+        for (let d = 0; d < 6 && node; d++) {
+            const vue = node.__vue__;
+            if (vue) {
+                const item = (vue.$attrs && (vue.$attrs['data-route-item'] || vue.$attrs.item))
+                    || vue.item
+                    || vue.routeItem
+                    || (vue.$props && (vue.$props['data-route-item'] || vue.$props.item));
+                if (item && typeof item === 'object') return item;
+            }
+            node = node.parentElement;
+        }
+    } catch (e) {}
+    return null;
+}
+
+function pickRouteHref(item) {
+    if (!item || typeof item !== 'object') return '';
+    const raw = item.href || item.path || item.url || '';
+    return raw ? String(raw) : '';
+}
+
 function parseTagEl(tag) {
     if (!tag) return null;
     const textEl = tag.querySelector('.ivu-tag-text');
@@ -354,13 +385,12 @@ function parseTagEl(tag) {
     let name = tag.id ? tag.id.replace(/^tag-nav-/, '') : '';
     let href = '';
     try {
-        const vue = tag.__vue__;
-        const item = vue && vue.$attrs && vue.$attrs['data-route-item'];
+        const item = getTagRouteItem(tag);
         if (item) {
             if (item.title) title = normalizeMenuText(item.title);
             if (item.name) name = item.name;
             if (item.key && item.key !== item.name) name = name || item.key;
-            if (item.href) href = String(item.href);
+            href = pickRouteHref(item);
         }
     } catch (e) {}
     const key = tag.id || name || title;
@@ -509,12 +539,12 @@ function activateTopLevelMenu(topLevelMenuName) {
 
 function syncLeftMenuFromMenuItem(topLevelMenu, itemText) {
     if (!topLevelMenu) return false;
-    pendingSyncInfo = {
+    setPendingSyncInfo({
         title: itemText || topLevelMenu,
         name: '',
         id: '',
         key: itemText || topLevelMenu
-    };
+    });
     lastSyncedTagKey = pendingSyncInfo.key;
     activateTopLevelMenu(topLevelMenu);
     if (itemText) {
@@ -532,7 +562,33 @@ function syncLeftMenuToActiveTab(forcedInfo) {
     if (!info || !info.title) return false;
 
     const match = findMenuMatchForTag(info);
-    if (!match || !match.topLevelMenu) return false;
+    if (!match || !match.topLevelMenu) {
+        const payload = {
+            title: info.title,
+            name: info.name,
+            href: info.href,
+            key: info.key,
+            id: info.id
+        };
+        if (!info.href) {
+            const activeTag = document.querySelector('.tags-nav .ivu-tag-checked')
+                || document.querySelector('.tags-nav .ivu-tag-primary');
+            const rawItem = getTagRouteItem(activeTag);
+            payload.routeItemKeys = rawItem ? Object.keys(rawItem) : null;
+            payload.routeItemSample = rawItem
+                ? {
+                    href: rawItem.href,
+                    path: rawItem.path,
+                    url: rawItem.url,
+                    name: rawItem.name,
+                    key: rawItem.key,
+                    title: rawItem.title
+                }
+                : null;
+        }
+        console.warn('ERP Menu Plugin: No left menu match for tab', payload);
+        return false;
+    }
 
     lastSyncedTagKey = info.key || info.title;
     activateTopLevelMenu(match.topLevelMenu);
@@ -545,19 +601,25 @@ function syncLeftMenuToActiveTab(forcedInfo) {
 
 function resolveTagInfoForSync() {
     const active = getActiveTagInfo();
-    if (pendingSyncInfo) {
-        if (active && active.key && active.key === pendingSyncInfo.key) {
+    if (!pendingSyncInfo) return active;
+    if (active) {
+        const sameKey = active.key && active.key === pendingSyncInfo.key;
+        const sameTitle = active.title && active.title === pendingSyncInfo.title;
+        if (sameKey || sameTitle) {
             pendingSyncInfo = null;
             return active;
         }
-        return pendingSyncInfo;
     }
-    return active;
+    if (Date.now() - pendingSyncInfo._ts > PENDING_SYNC_TTL) {
+        pendingSyncInfo = null;
+        return active;
+    }
+    return pendingSyncInfo;
 }
 
 function scheduleTagNavSync(forcedInfo) {
     if (forcedInfo) {
-        pendingSyncInfo = forcedInfo;
+        setPendingSyncInfo(forcedInfo);
     }
     if (tagNavSyncTimer) clearTimeout(tagNavSyncTimer);
     tagNavSyncTimer = setTimeout(() => {
@@ -577,7 +639,7 @@ function onTagNavClick(e) {
     }
     const info = parseTagEl(tag);
     if (!info) return;
-    pendingSyncInfo = info;
+    setPendingSyncInfo(info);
     syncLeftMenuToActiveTab(info);
 }
 
@@ -852,11 +914,13 @@ function isLikelyRouteId(value) {
 function getMenuItemRouteInfo(el) {
     if (!el) return null;
     const info = { name: '', key: '', href: '', title: '' };
-    const takeName = (v) => {
+    const take = (slot, v) => {
         if (!isLikelyRouteId(v)) return;
         const s = String(v);
-        if (!info.name) info.name = s;
+        if (!info[slot]) info[slot] = s;
     };
+    const takeName = (v) => take('name', v);
+    const takeKey = (v) => take('key', v);
     const takeHref = (v) => {
         if (v && typeof v === 'string' && !info.href) info.href = v;
     };
@@ -877,7 +941,7 @@ function getMenuItemRouteInfo(el) {
                     || vue.menuItem;
                 if (item && typeof item === 'object') {
                     takeName(item.name);
-                    takeName(item.key);
+                    takeKey(item.key);
                     takeHref(item.href || item.path || item.url);
                     if (item.title && !info.title) info.title = String(item.title);
                 }
@@ -898,28 +962,30 @@ function getMenuItemRouteInfo(el) {
 }
 
 function getTagRouteHref(tag) {
-    try {
-        const vue = tag.__vue__;
-        const item = vue && vue.$attrs && vue.$attrs['data-route-item'];
-        return item && item.href ? String(item.href) : '';
-    } catch (e) {
-        return '';
-    }
+    return pickRouteHref(getTagRouteItem(tag));
 }
 
 function hrefLooseEqual(a, b) {
     if (!a || !b) return false;
     const na = String(a).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
     const nb = String(b).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
-    return na === nb || na.endsWith(nb) || nb.endsWith(na);
+    if (na === nb) return true;
+    const segA = na.split('/').filter(Boolean);
+    const segB = nb.split('/').filter(Boolean);
+    if (segA.length === segB.length || segA.length === 0 || segB.length === 0) return false;
+    const longer = segA.length > segB.length ? segA : segB;
+    const shorter = segA.length > segB.length ? segB : segA;
+    if (shorter.length < 2) return false;
+    return longer.slice(longer.length - shorter.length).join('/') === shorter.join('/');
 }
 
 function findOriginalMenuItemByRoute(route) {
     if (!route || (!route.name && !route.href && !route.key)) return null;
-    const names = [route.name, route.key].filter(isLikelyRouteId).map(String);
+    const names = Array.from(new Set([route.name, route.key].filter(isLikelyRouteId).map(String)));
     const topLevelItems = getOriginalTopLevelItems();
-    let best = null;
     let bestScore = 0;
+    let bestCount = 0;
+    let best = null;
     topLevelItems.forEach(topLi => {
         const topTitle = getTopLevelTitleFromLi(topLi);
         topLi.querySelectorAll('.ivu-menu-item').forEach(item => {
@@ -932,15 +998,18 @@ function findOriginalMenuItemByRoute(route) {
             if (hrefLooseEqual(route.href, r.href)) score += 90;
             if (score > bestScore) {
                 bestScore = score;
+                bestCount = 1;
                 best = {
                     text: normalizeMenuText(item.innerText),
                     topLevelMenu: topTitle
                 };
+            } else if (score === bestScore && bestScore > 0) {
+                bestCount++;
             }
         });
     });
-    if (best && bestScore >= 90) return best;
-    return null;
+    if (bestScore < 90 || bestCount > 1) return null;
+    return best;
 }
 
 function findMenuMatchForTag(info) {
@@ -983,7 +1052,7 @@ function activateExistingTagByRoute(route, title) {
     best.click();
     const info = parseTagEl(best);
     if (info) {
-        pendingSyncInfo = info;
+        setPendingSyncInfo(info);
         lastSyncedTagKey = info.key;
     }
     return true;
@@ -992,22 +1061,7 @@ function activateExistingTagByRoute(route, title) {
 function openFavorite(fav) {
     const topMenu = fav.path && fav.path.length > 0 ? fav.path[0] : null;
     const subPath = fav.path && fav.path.length > 1 ? fav.path.slice(1) : [];
-    const originalItem = findOriginalMenuItem(fav.text, subPath, topMenu);
-    const route = (fav.routeName || fav.routeHref || fav.routeKey)
-        ? { name: fav.routeName || '', key: fav.routeKey || '', href: fav.routeHref || '' }
-        : getMenuItemRouteInfo(originalItem);
-
-    if (activateExistingTagByRoute(route, fav.text)) {
-        if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
-        return;
-    }
-
-    if (originalItem) {
-        originalItem.click();
-        if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
-        return;
-    }
-
+    // 与搜索浮层点击保持一致：直接触发原始菜单项，再同步左侧
     triggerOriginalClick(fav.text, subPath, topMenu);
     if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
 }
@@ -1163,72 +1217,116 @@ function getMenuItemPath(menuItem) {
     return path;
 }
 
-// 添加收藏标签页
-function addFavoritesTab(topMenuContainer, subMenuContainer) {
+// 添加收藏入口（结果在收藏按钮下方悬浮层，不占用左侧子菜单）
+function addFavoritesTab(topMenuContainer) {
     const favoritesTab = document.createElement('div');
     favoritesTab.className = 'custom-top-menu-item favorites-tab';
-    // 使用星号图标，如果页面有iView图标库则使用，否则使用文本
     favoritesTab.innerHTML = '<span style="margin-right: 6px;">★</span><span>收藏</span>';
     favoritesTab.title = '收藏的菜单项';
-    
-    favoritesTab.addEventListener('click', () => {
-        // 样式激活状态切换
-        document.querySelectorAll('.custom-top-menu-item').forEach(el => el.classList.remove('active'));
-        favoritesTab.classList.add('active');
-        
-        // 显示收藏列表
-        showFavoritesList(subMenuContainer);
+
+    const favoritesDropdown = document.createElement('div');
+    favoritesDropdown.className = 'favorites-dropdown';
+    favoritesDropdown.style.display = 'none';
+    favoritesTab.appendChild(favoritesDropdown);
+
+    const hideFavoritesDropdown = () => {
+        favoritesDropdown.style.display = 'none';
+        favoritesDropdown.innerHTML = '';
+        favoritesTab.classList.remove('favorites-open');
+    };
+
+    const toggleFavoritesDropdown = () => {
+        const open = favoritesDropdown.style.display !== 'none' && favoritesDropdown.style.display !== '';
+        if (open) {
+            hideFavoritesDropdown();
+            return;
+        }
+        // 打开前关掉搜索浮层，避免两层叠在一起
+        const searchDropdown = topMenuContainer.querySelector('.menu-search-dropdown');
+        if (searchDropdown) {
+            searchDropdown.style.display = 'none';
+            searchDropdown.innerHTML = '';
+        }
+        favoritesTab.classList.add('favorites-open');
+        showFavoritesList(favoritesDropdown, hideFavoritesDropdown);
+    };
+
+    favoritesTab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // 点浮层内部不切换开关（由条目自己处理）
+        if (e.target.closest('.favorites-dropdown')) return;
+        toggleFavoritesDropdown();
     });
-    
-    // 插入到logo之后（第一个菜单项之前）
+
+    document.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
+        if (!favoritesTab.contains(e.target)) {
+            hideFavoritesDropdown();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' || e.key === 'Esc') {
+            const open = favoritesDropdown.style.display !== 'none' && favoritesDropdown.style.display !== '';
+            if (open) {
+                e.preventDefault();
+                e.stopPropagation();
+                hideFavoritesDropdown();
+            }
+        }
+    }, true);
+
     const firstMenuItem = topMenuContainer.querySelector('.custom-top-menu-item:not(.favorites-tab)');
     if (firstMenuItem) {
         topMenuContainer.insertBefore(favoritesTab, firstMenuItem);
     } else {
-        // 如果没有其他菜单项，追加到末尾
         topMenuContainer.appendChild(favoritesTab);
     }
 }
 
-// 显示收藏列表
-function showFavoritesList(subMenuContainer) {
-    subMenuContainer.innerHTML = '';
-    
+// 在悬浮层显示收藏列表
+function showFavoritesList(favoritesDropdown, hideFavoritesDropdown) {
+    favoritesDropdown.innerHTML = '';
+    favoritesDropdown.style.display = 'block';
+
     if (favoriteMenuItems.length === 0) {
-        subMenuContainer.innerHTML = '<div class="no-submenu-tip">暂无收藏的菜单项<br/><small style="color: #666;">点击菜单项旁的☆图标可添加到收藏</small></div>';
+        favoritesDropdown.innerHTML = '<div class="favorites-dropdown-header">暂无收藏的菜单项<br/><small style="opacity:0.75;">点击菜单项旁的☆图标可添加到收藏</small></div>';
         return;
     }
-    
+
+    const header = document.createElement('div');
+    header.className = 'favorites-dropdown-header';
+    header.textContent = `共 ${favoriteMenuItems.length} 个收藏`;
+    favoritesDropdown.appendChild(header);
+
     const favoritesList = document.createElement('ul');
     favoritesList.className = 'ivu-menu favorites-list';
     favoritesList.style.background = 'transparent';
-    
-    // 创建副本以避免在遍历时修改数组导致的问题
+
     const favoritesCopy = [...favoriteMenuItems];
-    
-    favoritesCopy.forEach((fav, index) => {
+
+    favoritesCopy.forEach((fav) => {
         const li = document.createElement('li');
         li.className = 'ivu-menu-item favorite-item';
-        
-        const pathText = fav.path.length > 0 ? fav.path.join(' > ') + ' > ' : '';
+
+        const pathText = fav.path && fav.path.length > 0 ? fav.path.join(' > ') : '';
         li.innerHTML = `
-            <span class="favorite-item-text">${pathText}${fav.text}</span>
-            <span class="favorite-btn favorited" data-text="${fav.text.replace(/"/g, '&quot;')}">★</span>
+            <div class="favorite-item-main">
+                ${pathText ? `<div class="favorite-item-path">${pathText}</div>` : ''}
+                <div class="favorite-item-text">${fav.text}</div>
+            </div>
+            <span class="favorite-btn favorited" title="取消收藏">★</span>
         `;
-        
-        // 点击菜单项
-        const textSpan = li.querySelector('.favorite-item-text');
-        textSpan.style.cursor = 'pointer';
-        textSpan.addEventListener('click', () => {
+
+        li.querySelector('.favorite-item-main').addEventListener('click', (e) => {
+            e.stopPropagation();
             openFavorite(fav);
+            if (typeof hideFavoritesDropdown === 'function') hideFavoritesDropdown();
         });
-        
-        // 点击收藏按钮取消收藏
-        const btn = li.querySelector('.favorite-btn');
-        btn.addEventListener('click', (e) => {
+
+        li.querySelector('.favorite-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            // 根据文本查找并删除
             const itemIndex = favoriteMenuItems.findIndex(item => {
                 if (item.text !== fav.text) return false;
                 const a = item.path || [];
@@ -1242,24 +1340,28 @@ function showFavoritesList(subMenuContainer) {
             if (itemIndex > -1) {
                 favoriteMenuItems.splice(itemIndex, 1);
                 saveFavorites();
-                showFavoritesList(subMenuContainer);
+                showFavoritesList(favoritesDropdown, hideFavoritesDropdown);
             }
         });
-        
+
         favoritesList.appendChild(li);
     });
-    
-    subMenuContainer.appendChild(favoritesList);
+
+    favoritesDropdown.appendChild(favoritesList);
 }
 
-// 更新收藏标签页
+// 更新收藏浮层（若当前打开则刷新）
 function updateFavoritesTab() {
     const favoritesTab = document.querySelector('.favorites-tab');
-    if (favoritesTab && favoritesTab.classList.contains('active')) {
-        const subMenuContainer = document.querySelector('.custom-sub-menu-container');
-        if (subMenuContainer) {
-            showFavoritesList(subMenuContainer);
-        }
+    const favoritesDropdown = favoritesTab && favoritesTab.querySelector('.favorites-dropdown');
+    if (!favoritesDropdown) return;
+    const open = favoritesDropdown.style.display !== 'none' && favoritesDropdown.style.display !== '';
+    if (open) {
+        showFavoritesList(favoritesDropdown, () => {
+            favoritesDropdown.style.display = 'none';
+            favoritesDropdown.innerHTML = '';
+            favoritesTab.classList.remove('favorites-open');
+        });
     }
 }
 
@@ -1308,6 +1410,14 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
             if (query.length > 0) {
+                // 打开搜索浮层前关掉收藏浮层
+                const favDropdown = topMenuContainer.querySelector('.favorites-dropdown');
+                const favTab = topMenuContainer.querySelector('.favorites-tab');
+                if (favDropdown) {
+                    favDropdown.style.display = 'none';
+                    favDropdown.innerHTML = '';
+                }
+                if (favTab) favTab.classList.remove('favorites-open');
                 performSearch(query, searchDropdown, rootMenuConfig);
             } else {
                 hideSearchDropdown();

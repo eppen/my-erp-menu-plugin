@@ -334,6 +334,7 @@ function initSubMenuInteractions(rootElement, topLevelMenuName = null) {
             
             // 确保子菜单默认展开
             nextUl.style.display = 'block';
+            nextUl.classList.remove('erp-submenu-collapsed');
             
             // 添加折叠指示箭头逻辑（如果原 DOM 有箭头 icon）
             const arrow = title.querySelector('.ivu-icon-ios-arrow-down');
@@ -347,14 +348,16 @@ function initSubMenuInteractions(rootElement, topLevelMenuName = null) {
             title.addEventListener('click', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                const isVisible = nextUl.style.display !== 'none';
+                const isCollapsed = nextUl.classList.contains('erp-submenu-collapsed');
                 
-                if (isVisible) {
-                    nextUl.style.display = 'none';
-                    if (arrow) arrow.style.transform = 'rotate(-90deg)';
-                } else {
+                if (isCollapsed) {
+                    nextUl.classList.remove('erp-submenu-collapsed');
                     nextUl.style.display = 'block';
                     if (arrow) arrow.style.transform = 'rotate(0deg)';
+                } else {
+                    nextUl.classList.add('erp-submenu-collapsed');
+                    nextUl.style.display = 'none';
+                    if (arrow) arrow.style.transform = 'rotate(-90deg)';
                 }
             });
         }

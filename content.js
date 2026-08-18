@@ -499,6 +499,22 @@ function activateTopLevelMenu(topLevelMenuName) {
     return false;
 }
 
+function syncLeftMenuFromMenuItem(topLevelMenu, itemText) {
+    if (!topLevelMenu) return false;
+    pendingSyncInfo = {
+        title: itemText || topLevelMenu,
+        name: '',
+        id: '',
+        key: itemText || topLevelMenu
+    };
+    lastSyncedTagKey = pendingSyncInfo.key;
+    activateTopLevelMenu(topLevelMenu);
+    if (itemText) {
+        setTimeout(() => highlightLeftMenuItem(itemText), 40);
+    }
+    return true;
+}
+
 // 按当前内容 tab 切换左侧模块菜单并选中对应页面
 function syncLeftMenuToActiveTab(forcedInfo) {
     if (!isMenuModificationEnabled) return false;
@@ -522,7 +538,7 @@ function syncLeftMenuToActiveTab(forcedInfo) {
 function resolveTagInfoForSync() {
     const active = getActiveTagInfo();
     if (pendingSyncInfo) {
-        if (active && active.key === pendingSyncInfo.key) {
+        if (active && (active.key === pendingSyncInfo.key || active.title === pendingSyncInfo.title)) {
             pendingSyncInfo = null;
             return active;
         }
@@ -1187,8 +1203,9 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
         }
     }, true);
     
-    // 点击搜索框/悬浮层外部时关闭悬浮层
+    // 点击搜索框/悬浮层外部时关闭悬浮层（忽略程序触发的 click，避免切模块菜单时关掉浮层）
     document.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
         if (!searchContainer.contains(e.target)) {
             hideSearchDropdown();
         }
@@ -1292,8 +1309,8 @@ function displaySearchResults(results, searchDropdown, query) {
         
         li.addEventListener('click', (e) => {
             e.stopPropagation();
-            // 只打开页面，保留悬浮层以便继续点选其它结果
             triggerOriginalClick(result.text, result.path.slice(1), result.topLevelMenu);
+            syncLeftMenuFromMenuItem(result.topLevelMenu, result.text);
 
             searchDropdown.querySelectorAll('.search-result-item-active').forEach(el => {
                 el.classList.remove('search-result-item-active');

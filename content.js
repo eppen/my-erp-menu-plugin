@@ -824,7 +824,7 @@ function updateFavoritesTab() {
     }
 }
 
-// 添加搜索框
+// 添加搜索框（结果在搜索框下方悬浮层，不占用左侧子菜单）
 function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
     const searchContainer = document.createElement('div');
     searchContainer.className = 'menu-search-container';
@@ -838,9 +838,14 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
     searchInput.className = 'menu-search-input';
     searchInput.placeholder = '搜索菜单... (Ctrl+K)';
     searchInput.title = '搜索菜单项，按 Ctrl+K 快速聚焦';
+
+    const searchDropdown = document.createElement('div');
+    searchDropdown.className = 'menu-search-dropdown';
+    searchDropdown.style.display = 'none';
     
     searchContainer.appendChild(searchIcon);
     searchContainer.appendChild(searchInput);
+    searchContainer.appendChild(searchDropdown);
     
     // 插入到logo之后
     const logo = topMenuContainer.querySelector('.custom-top-logo');
@@ -849,6 +854,11 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
     } else {
         topMenuContainer.insertBefore(searchContainer, topMenuContainer.firstChild);
     }
+
+    const hideSearchDropdown = () => {
+        searchDropdown.style.display = 'none';
+        searchDropdown.innerHTML = '';
+    };
     
     // 搜索功能
     let searchTimeout = null;
@@ -859,15 +869,9 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
             if (query.length > 0) {
-                performSearch(query, subMenuContainer, rootMenuConfig);
+                performSearch(query, searchDropdown, rootMenuConfig);
             } else {
-                // 清空搜索，恢复当前激活的菜单
-                const activeTab = topMenuContainer.querySelector('.custom-top-menu-item.active:not(.favorites-tab)');
-                if (activeTab) {
-                    activeTab.click();
-                } else {
-                    subMenuContainer.innerHTML = '';
-                }
+                hideSearchDropdown();
             }
         }, 300);
     });
@@ -880,30 +884,24 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
             searchInput.focus();
             searchInput.select();
         }
-        // ESC 键清除搜索
-        if (e.key === 'Escape' && document.activeElement === searchInput) {
+        // ESC 键清除搜索并关闭悬浮层
+        if (e.key === 'Escape' && (document.activeElement === searchInput || searchDropdown.style.display !== 'none')) {
             searchInput.value = '';
             searchInput.blur();
-            const activeTab = topMenuContainer.querySelector('.custom-top-menu-item.active:not(.favorites-tab)');
-            if (activeTab) {
-                activeTab.click();
-            }
+            hideSearchDropdown();
         }
     });
     
-    // 点击搜索框外部时，如果搜索框为空，恢复菜单
+    // 点击搜索框/悬浮层外部时关闭悬浮层
     document.addEventListener('click', (e) => {
-        if (!searchContainer.contains(e.target) && searchInput.value.trim() === '') {
-            const activeTab = topMenuContainer.querySelector('.custom-top-menu-item.active:not(.favorites-tab)');
-            if (activeTab) {
-                activeTab.click();
-            }
+        if (!searchContainer.contains(e.target)) {
+            hideSearchDropdown();
         }
     });
 }
 
 // 执行搜索
-function performSearch(query, subMenuContainer, rootMenuConfig) {
+function performSearch(query, searchDropdown, rootMenuConfig) {
     const results = [];
     const searchLower = query.toLowerCase();
     
@@ -936,8 +934,8 @@ function performSearch(query, subMenuContainer, rootMenuConfig) {
         });
     });
     
-    // 显示搜索结果
-    displaySearchResults(results, subMenuContainer, query);
+    // 显示搜索结果到悬浮层
+    displaySearchResults(results, searchDropdown, query);
 }
 
 // 从原始菜单项获取完整路径
@@ -965,28 +963,31 @@ function getMenuItemFullPathFromOriginal(menuItem) {
     return path;
 }
 
-// 显示搜索结果
-function displaySearchResults(results, subMenuContainer, query) {
-    subMenuContainer.innerHTML = '';
+// 在悬浮层显示搜索结果（不改写左侧子菜单）
+function displaySearchResults(results, searchDropdown, query) {
+    searchDropdown.innerHTML = '';
+    searchDropdown.style.display = 'block';
     
     if (results.length === 0) {
-        subMenuContainer.innerHTML = `<div class="no-submenu-tip">未找到匹配的菜单项<br/><small style="color: #666;">搜索关键词: "${query}"</small></div>`;
+        searchDropdown.innerHTML = `<div class="search-results-header">未找到匹配的菜单项<br/><small style="opacity:0.75;">搜索关键词: "${query}"</small></div>`;
         return;
     }
     
+    const header = document.createElement('div');
+    header.className = 'search-results-header';
+    header.innerHTML = `找到 ${results.length} 个匹配项`;
+    searchDropdown.appendChild(header);
+
     const resultsList = document.createElement('ul');
     resultsList.className = 'ivu-menu search-results-list';
     resultsList.style.background = 'transparent';
     
-    // 按路径分组显示结果
-    results.forEach((result, index) => {
+    results.forEach((result) => {
         const li = document.createElement('li');
         li.className = 'ivu-menu-item search-result-item';
         
         const pathText = result.path.length > 0 ? result.path.join(' > ') + ' > ' : '';
         const displayText = result.text;
-        
-        // 高亮匹配的文本
         const highlightedText = highlightMatch(displayText, query);
         
         li.innerHTML = `
@@ -994,34 +995,21 @@ function displaySearchResults(results, subMenuContainer, query) {
             <div class="search-result-text">${highlightedText}</div>
         `;
         
-        li.addEventListener('click', () => {
-            // 触发原始菜单项的点击
+        li.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 只打开页面，保留悬浮层以便继续点选其它结果
             triggerOriginalClick(result.text, result.path.slice(1), result.topLevelMenu);
-            
-            // 切换到对应的顶级菜单
-            const topMenuContainer = document.querySelector('.custom-top-menu-container');
-            if (topMenuContainer && result.topLevelMenu) {
-                const topMenuItems = topMenuContainer.querySelectorAll('.custom-top-menu-item:not(.favorites-tab)');
-                for (const topItem of topMenuItems) {
-                    const topText = topItem.querySelector('span')?.innerText || '';
-                    if (topText === result.topLevelMenu) {
-                        topItem.click();
-                        break;
-                    }
-                }
-            }
+
+            searchDropdown.querySelectorAll('.search-result-item-active').forEach(el => {
+                el.classList.remove('search-result-item-active');
+            });
+            li.classList.add('search-result-item-active');
         });
         
         resultsList.appendChild(li);
     });
     
-    // 添加结果数量提示
-    const header = document.createElement('div');
-    header.className = 'search-results-header';
-    header.innerHTML = `找到 ${results.length} 个匹配项`;
-    subMenuContainer.appendChild(header);
-    
-    subMenuContainer.appendChild(resultsList);
+    searchDropdown.appendChild(resultsList);
 }
 
 // 高亮匹配的文本

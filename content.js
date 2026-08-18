@@ -777,126 +777,179 @@ function getTopLevelMenuName(menuItem) {
     return null;
 }
 
-function triggerOriginalClick(text, path = [], topLevelMenuName = null) {
-    // 在隐藏的原始菜单中找到对应文本和路径的项并点击
+function stripTopFromPath(path, topLevelMenuName) {
+    const list = (path || []).map(normalizeMenuText).filter(Boolean);
+    if (topLevelMenuName && list.length > 0 && list[0] === topLevelMenuName) {
+        return list.slice(1);
+    }
+    return list;
+}
+
+function pathsEqual(a, b, topLevelMenuName) {
+    const x = stripTopFromPath(a, topLevelMenuName);
+    const y = stripTopFromPath(b, topLevelMenuName);
+    if (x.length !== y.length) return false;
+    for (let i = 0; i < x.length; i++) {
+        if (x[i] !== y[i]) return false;
+    }
+    return true;
+}
+
+function getOriginalTopLevelItems() {
     const originalSidebar = document.querySelector('.sider-memutree-conainter');
-    if (!originalSidebar) return;
-    
-    // 如果提供了顶级菜单名称，先找到该顶级菜单下的所有菜单项
-    let itemsToSearch = [];
+    if (!originalSidebar) return [];
+    const rootMenu = originalSidebar.querySelector('.ivu-menu');
+    if (!rootMenu) return [];
+    return Array.from(rootMenu.children).filter(node => node.tagName === 'LI');
+}
+
+function findOriginalMenuItem(text, path = [], topLevelMenuName = null) {
+    const topLevelItems = getOriginalTopLevelItems();
+    if (topLevelItems.length === 0) return null;
+
+    let scoped = topLevelItems;
     if (topLevelMenuName) {
-        // 找到所有顶级菜单项
-        const rootMenu = originalSidebar.querySelector('.ivu-menu');
-        if (rootMenu) {
-            const topLevelItems = Array.from(rootMenu.children).filter(node => node.tagName === 'LI');
-            for (const topLi of topLevelItems) {
-                const topTitle = topLi.querySelector('.ivu-menu-submenu-title');
-                if (topTitle && topTitle.innerText.trim() === topLevelMenuName) {
-                    // 找到匹配的顶级菜单，获取其下所有菜单项
-                    itemsToSearch = topLi.querySelectorAll('.ivu-menu-item');
-                    break;
-                }
-            }
-        }
+        scoped = topLevelItems.filter(topLi => getTopLevelTitleFromLi(topLi) === topLevelMenuName);
+        if (scoped.length === 0) scoped = topLevelItems;
     }
-    
-    // 如果没有找到或没有提供顶级菜单名称，搜索所有菜单项
-    if (itemsToSearch.length === 0) {
-        itemsToSearch = originalSidebar.querySelectorAll('.ivu-menu-item');
-    }
-    
-    console.log('ERP Menu Plugin: Searching for menu item:', {
-        text: text,
-        path: path,
-        topLevelMenuName: topLevelMenuName,
-        itemsToSearchCount: itemsToSearch.length
+
+    const items = [];
+    scoped.forEach(topLi => {
+        topLi.querySelectorAll('.ivu-menu-item').forEach(item => items.push({ item, topLi }));
     });
-    
-    for (let i = 0; i < itemsToSearch.length; i++) {
-        const item = itemsToSearch[i];
-        // 获取菜单项的真实文本（排除可能的图标等）
-        const itemText = item.innerText.trim();
-        
-        // 文本必须匹配
-        if (itemText !== text) continue;
-        
-        console.log('ERP Menu Plugin: Found matching text:', itemText);
-        
-        // 如果有路径信息，验证路径是否匹配
-        if (path && path.length > 0) {
-            const itemPath = getMenuItemFullPath(item);
-            
-            // 比较路径
-            // itemPath 可能包含顶级菜单名称，path 也可能包含或不包含
-            // 如果提供了 topLevelMenuName，我们应该确保路径匹配时不包含顶级菜单名称
-            let pathToMatch = path.slice();
-            let itemPathToMatch = itemPath.slice();
-            
-            // 如果 itemPath 的第一个元素是顶级菜单名称，移除它
-            if (topLevelMenuName && itemPathToMatch.length > 0 && itemPathToMatch[0] === topLevelMenuName) {
-                itemPathToMatch = itemPathToMatch.slice(1);
-            }
-            
-            // 如果 path 的第一个元素是顶级菜单名称，移除它
-            if (topLevelMenuName && pathToMatch.length > 0 && pathToMatch[0] === topLevelMenuName) {
-                pathToMatch = pathToMatch.slice(1);
-            }
-            
-            // 比较路径长度和内容
-            if (itemPathToMatch.length === pathToMatch.length) {
-                let pathMatch = true;
-                for (let j = 0; j < pathToMatch.length; j++) {
-                    if (itemPathToMatch[j] !== pathToMatch[j]) {
-                        pathMatch = false;
-                        break;
-                    }
-                }
-                if (pathMatch) {
-                    console.log('Triggering original menu click for:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
-                    item.click();
-                    return;
-                }
-            }
-            
-            // 如果精确匹配失败，尝试模糊匹配（只比较最后几个元素）
-            if (itemPathToMatch.length >= pathToMatch.length && pathToMatch.length > 0) {
-                const itemPathSuffix = itemPathToMatch.slice(-pathToMatch.length);
-                let pathMatch = true;
-                for (let j = 0; j < pathToMatch.length; j++) {
-                    if (itemPathSuffix[j] !== pathToMatch[j]) {
-                        pathMatch = false;
-                        break;
-                    }
-                }
-                if (pathMatch) {
-                    console.log('ERP Menu Plugin: Path fuzzy match! Triggering click for:', text);
-                    item.click();
-                    return;
-                }
-            }
-            
-            // 如果路径匹配失败，但有顶级菜单名称限制，且文本匹配，也允许点击（降级处理）
-            if (topLevelMenuName) {
-                console.log('ERP Menu Plugin: Path mismatch, but text matches in correct top menu. Triggering click for:', text);
-                item.click();
-                return;
-            }
-        } else {
-            // 没有路径信息，但有顶级菜单名称，只在该顶级菜单下匹配
-            if (topLevelMenuName) {
-                console.log('Triggering original menu click for:', text, 'in top menu:', topLevelMenuName);
-                item.click();
-                return;
-            } else {
-                // 没有路径和顶级菜单信息，使用文本匹配（兼容旧代码）
-                console.log('Triggering original menu click for:', text, '(text only)');
-                item.click();
-                return;
-            }
-        }
+
+    const exact = items.filter(({ item }) => normalizeMenuText(item.innerText) === text);
+    if (exact.length === 0) return null;
+
+    if (path && path.length > 0) {
+        const pathHit = exact.find(({ item }) => {
+            return pathsEqual(getMenuItemFullPath(item), path, topLevelMenuName);
+        });
+        if (pathHit) return pathHit.item;
     }
-    
-    console.warn('ERP Menu Plugin: Could not find menu item:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
+
+    if (topLevelMenuName && exact.length === 1) return exact[0].item;
+    if (exact.length === 1) return exact[0].item;
+    return null;
+}
+
+function getMenuItemRouteInfo(el) {
+    if (!el) return null;
+    const info = { name: '', key: '', href: '', title: '' };
+    try {
+        let node = el;
+        for (let d = 0; d < 5 && node; d++) {
+            const vue = node.__vue__;
+            if (vue) {
+                const propName = vue.$props && vue.$props.name;
+                if (typeof vue.name === 'string' && vue.name) info.name = info.name || vue.name;
+                if (typeof propName === 'string' && propName) info.name = info.name || propName;
+
+                const item = vue.item || (vue.$attrs && (vue.$attrs.item || vue.$attrs['data-route-item']));
+                if (item && typeof item === 'object') {
+                    info.name = info.name || item.name || '';
+                    info.key = info.key || item.key || '';
+                    info.href = info.href || item.href || item.path || item.url || '';
+                    info.title = info.title || item.title || '';
+                }
+                const to = vue.to || (vue.$props && vue.$props.to);
+                if (to) {
+                    if (typeof to === 'string') info.href = info.href || to;
+                    else {
+                        info.href = info.href || to.path || to.href || '';
+                        info.name = info.name || to.name || '';
+                    }
+                }
+            }
+            node = node.parentElement;
+        }
+    } catch (e) {}
+    if (!info.name && !info.key && !info.href) return null;
+    return info;
+}
+
+function getTagRouteHref(tag) {
+    try {
+        const vue = tag.__vue__;
+        const item = vue && vue.$attrs && vue.$attrs['data-route-item'];
+        return item && item.href ? String(item.href) : '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function hrefLooseEqual(a, b) {
+    if (!a || !b) return false;
+    const na = String(a).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
+    const nb = String(b).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
+    return na === nb || na.endsWith(nb) || nb.endsWith(na);
+}
+
+function activateExistingTagByRoute(route, title) {
+    const tags = Array.from(document.querySelectorAll('.tags-nav .ivu-tag'));
+    if (tags.length === 0) return false;
+
+    let best = null;
+    let bestScore = 0;
+    tags.forEach(tag => {
+        const info = parseTagEl(tag);
+        if (!info) return;
+        let score = 0;
+        if (route) {
+            if (route.name && (info.name === route.name || info.id === 'tag-nav-' + route.name)) score += 100;
+            if (route.key && (info.name === route.key || info.id === 'tag-nav-' + route.key)) score += 100;
+            const tagHref = getTagRouteHref(tag);
+            if (hrefLooseEqual(route.href, tagHref)) score += 90;
+        }
+        if (title && info.title === title) score += 5;
+        if (score > bestScore) {
+            bestScore = score;
+            best = tag;
+        }
+    });
+
+    if (!best || bestScore < 90) return false;
+    best.click();
+    const info = parseTagEl(best);
+    if (info) {
+        pendingSyncInfo = info;
+        lastSyncedTagKey = info.key;
+    }
+    return true;
+}
+
+function openFavorite(fav) {
+    const topMenu = fav.path && fav.path.length > 0 ? fav.path[0] : null;
+    const subPath = fav.path && fav.path.length > 1 ? fav.path.slice(1) : [];
+    const originalItem = findOriginalMenuItem(fav.text, subPath, topMenu);
+    const route = (fav.routeName || fav.routeHref || fav.routeKey)
+        ? { name: fav.routeName || '', key: fav.routeKey || '', href: fav.routeHref || '' }
+        : getMenuItemRouteInfo(originalItem);
+
+    if (activateExistingTagByRoute(route, fav.text)) {
+        if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
+        return;
+    }
+
+    if (originalItem) {
+        originalItem.click();
+        if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
+        return;
+    }
+
+    triggerOriginalClick(fav.text, subPath, topMenu);
+    if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
+}
+
+function triggerOriginalClick(text, path = [], topLevelMenuName = null) {
+    const item = findOriginalMenuItem(text, path, topLevelMenuName);
+    if (!item) {
+        console.warn('ERP Menu Plugin: Could not find menu item:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
+        return;
+    }
+    const route = getMenuItemRouteInfo(item);
+    if (activateExistingTagByRoute(route, text)) return;
+    item.click();
 }
 
 // 加载收藏列表
@@ -992,10 +1045,15 @@ function toggleFavorite(menuItem, itemText, favoriteBtn, topLevelMenuName = null
         console.log('ERP Menu Plugin: Removed from favorites:', itemText, 'path:', fullPath);
     } else {
         // 添加收藏
+        const orig = findOriginalMenuItem(itemText, itemPath, topLevelMenuName);
+        const route = getMenuItemRouteInfo(orig) || {};
         favoriteMenuItems.push({
             text: itemText,
             path: fullPath,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            routeName: route.name || '',
+            routeKey: route.key || '',
+            routeHref: route.href || ''
         });
         favoriteBtn.classList.add('favorited');
         favoriteBtn.innerHTML = '★';
@@ -1091,11 +1149,7 @@ function showFavoritesList(subMenuContainer) {
         const textSpan = li.querySelector('.favorite-item-text');
         textSpan.style.cursor = 'pointer';
         textSpan.addEventListener('click', () => {
-            // 使用保存的路径信息进行精确匹配
-            // 如果路径中有顶级菜单名称，提取它
-            const topMenu = fav.path && fav.path.length > 0 ? fav.path[0] : null;
-            const subPath = fav.path && fav.path.length > 1 ? fav.path.slice(1) : [];
-            triggerOriginalClick(fav.text, subPath, topMenu);
+            openFavorite(fav);
         });
         
         // 点击收藏按钮取消收藏
@@ -1104,7 +1158,16 @@ function showFavoritesList(subMenuContainer) {
             e.stopPropagation();
             e.preventDefault();
             // 根据文本查找并删除
-            const itemIndex = favoriteMenuItems.findIndex(item => item.text === fav.text);
+            const itemIndex = favoriteMenuItems.findIndex(item => {
+                if (item.text !== fav.text) return false;
+                const a = item.path || [];
+                const b = fav.path || [];
+                if (a.length !== b.length) return false;
+                for (let i = 0; i < a.length; i++) {
+                    if (a[i] !== b[i]) return false;
+                }
+                return true;
+            });
             if (itemIndex > -1) {
                 favoriteMenuItems.splice(itemIndex, 1);
                 saveFavorites();

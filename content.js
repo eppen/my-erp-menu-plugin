@@ -10,6 +10,11 @@ let currentTopLevelMenuName = null;
 // 顶栏操作区位置：'left' | 'right'
 let headerActionsPosition = 'right';
 
+// 内容区 tab 与左侧菜单同步
+let lastSyncedTagTitle = null;
+let tagNavObserver = null;
+let tagNavSyncTimer = null;
+
 // 恢复原始菜单显示
 function restoreOriginalMenu() {
     console.log('ERP Menu Plugin: Restoring original menu...');
@@ -31,6 +36,16 @@ function restoreOriginalMenu() {
     
     // 移除body类
     document.body.classList.remove('custom-layout-active');
+
+    lastSyncedTagTitle = null;
+    if (tagNavObserver) {
+        tagNavObserver.disconnect();
+        tagNavObserver = null;
+    }
+    if (tagNavSyncTimer) {
+        clearTimeout(tagNavSyncTimer);
+        tagNavSyncTimer = null;
+    }
     
     console.log('ERP Menu Plugin: Original menu restored.');
 }
@@ -182,12 +197,6 @@ function applyCustomLayout() {
         });
 
         topMenuContainer.appendChild(topMenuItem);
-
-        // 默认选中第一个
-        if (index === 0) {
-            // 使用 setTimeout 确保 DOM 渲染后再点击
-            setTimeout(() => topMenuItem.click(), 100);
-        }
     });
 
     // 加载收藏列表并添加收藏菜单标签页
@@ -200,6 +209,15 @@ function applyCustomLayout() {
 
     // 将原页面右上角按钮/下拉迁入插件顶栏，并隐藏原 header 行
     relocateHeaderActions(topMenuContainer);
+
+    // 按当前内容区 tab 同步左侧模块；没有 tab 时才默认第一个模块
+    setTimeout(() => {
+        if (!syncLeftMenuToActiveTab()) {
+            const first = topMenuContainer.querySelector('.custom-top-menu-item:not(.favorites-tab):not(.custom-more-menu)');
+            if (first) first.click();
+        }
+        initTagNavSync();
+    }, 120);
 
     // 添加横向菜单折叠功能（可选）- 延迟执行确保DOM渲染完成
     // 使用双重延迟确保所有元素都已渲染
@@ -306,6 +324,188 @@ function restoreHeaderActions() {
         headerCon.style.padding = '';
         headerCon.style.overflow = '';
     }
+}
+
+// 读取内容区当前激活 tab 标题
+function getActiveTagTitle() {
+    const tag = document.querySelector('.tags-nav .ivu-tag-checked')
+        || document.querySelector('.tags-nav .ivu-tag-primary');
+    if (!tag) return null;
+    const textEl = tag.querySelector('.ivu-tag-text');
+    const title = (textEl ? textEl.innerText : tag.innerText).replace(/\s+/g, ' ').trim();
+    return title || null;
+}
+
+// 根据 tab 标题在原始菜单中找对应模块和叶子项
+function findMenuMatchForTitle(title) {
+    if (!title) return null;
+    const originalSidebar = document.querySelector('.sider-memutree-conainter');
+    if (!originalSidebar) return null;
+    const rootMenu = originalSidebar.querySelector('.ivu-menu');
+    if (!rootMenu) return null;
+
+    const topLevelItems = Array.from(rootMenu.children).filter(node => node.tagName === 'LI');
+    const exact = [];
+
+    topLevelItems.forEach(topLi => {
+        const topTitleEl = topLi.querySelector('.ivu-menu-submenu-title');
+        const topTitle = topTitleEl ? (topTitleEl.querySelector('span')?.innerText || topTitleEl.innerText || '').trim() : '';
+        topLi.querySelectorAll('.ivu-menu-item').forEach(item => {
+            const itemText = item.innerText.replace(/\s+/g, ' ').trim();
+            if (itemText === title) {
+                exact.push({
+                    text: itemText,
+                    topLevelMenu: topTitle,
+                    path: getMenuItemFullPath(item)
+                });
+            }
+        });
+    });
+
+    if (exact.length === 1) return exact[0];
+    if (exact.length > 1) {
+        return exact.find(e => e.topLevelMenu === currentTopLevelMenuName) || exact[0];
+    }
+
+    let bestLeaf = null;
+    topLevelItems.forEach(topLi => {
+        const topTitleEl = topLi.querySelector('.ivu-menu-submenu-title');
+        const topTitle = topTitleEl ? (topTitleEl.querySelector('span')?.innerText || topTitleEl.innerText || '').trim() : '';
+        topLi.querySelectorAll('.ivu-menu-item').forEach(item => {
+            const itemText = item.innerText.replace(/\s+/g, ' ').trim();
+            if (!itemText || itemText.length < 2) return;
+            if (title.includes(itemText) || itemText.includes(title)) {
+                if (!bestLeaf || itemText.length > bestLeaf.text.length) {
+                    bestLeaf = {
+                        text: itemText,
+                        topLevelMenu: topTitle,
+                        path: getMenuItemFullPath(item)
+                    };
+                }
+            }
+        });
+    });
+    if (bestLeaf) return bestLeaf;
+
+    let bestTop = null;
+    topLevelItems.forEach(topLi => {
+        const topTitleEl = topLi.querySelector('.ivu-menu-submenu-title');
+        const topTitle = topTitleEl ? (topTitleEl.querySelector('span')?.innerText || topTitleEl.innerText || '').trim() : '';
+        if (!topTitle) return;
+        if (title === topTitle || title.startsWith(topTitle) || title.includes(topTitle)) {
+            if (!bestTop || topTitle.length > bestTop.topLevelMenu.length) {
+                bestTop = { text: null, topLevelMenu: topTitle, path: [] };
+            }
+        }
+    });
+    return bestTop;
+}
+
+// 展开左侧菜单中目标项的祖先，并高亮该项
+function highlightLeftMenuItem(text) {
+    const container = document.querySelector('.custom-sub-menu-container');
+    if (!container || !text) return;
+
+    const items = container.querySelectorAll('.ivu-menu-item');
+    let target = null;
+    for (const item of items) {
+        if (getMenuItemText(item) === text) {
+            target = item;
+            break;
+        }
+    }
+    if (!target) return;
+
+    container.querySelectorAll('.ivu-menu-item').forEach(i => {
+        i.classList.remove('ivu-menu-item-active', 'ivu-menu-item-selected');
+    });
+    target.classList.add('ivu-menu-item-active', 'ivu-menu-item-selected');
+
+    let el = target.parentElement;
+    while (el && el !== container) {
+        if (el.tagName === 'UL') {
+            el.classList.remove('erp-submenu-collapsed');
+            el.style.display = 'block';
+            const title = el.previousElementSibling;
+            if (title && title.classList.contains('ivu-menu-submenu-title')) {
+                const arrow = title.querySelector('.ivu-icon-ios-arrow-down');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+        el = el.parentElement;
+    }
+
+    if (typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+function activateTopLevelMenu(topLevelMenuName) {
+    if (!topLevelMenuName) return false;
+    const topMenuContainer = document.querySelector('.custom-top-menu-container');
+    if (!topMenuContainer) return false;
+    const topItems = topMenuContainer.querySelectorAll('.custom-top-menu-item:not(.favorites-tab):not(.custom-more-menu)');
+    for (const item of topItems) {
+        const topText = item.querySelector('span')?.innerText || '';
+        if (topText === topLevelMenuName) {
+            if (!item.classList.contains('active')) {
+                item.click();
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+// 按当前内容 tab 切换左侧模块菜单并选中对应页面
+function syncLeftMenuToActiveTab() {
+    if (!isMenuModificationEnabled) return false;
+    if (!document.querySelector('.custom-top-menu-container')) return false;
+
+    const title = getActiveTagTitle();
+    if (!title) return false;
+    if (title === lastSyncedTagTitle && document.querySelector('.custom-top-menu-item.active:not(.favorites-tab)')) {
+        return true;
+    }
+
+    const match = findMenuMatchForTitle(title);
+    if (!match || !match.topLevelMenu) return false;
+
+    lastSyncedTagTitle = title;
+    activateTopLevelMenu(match.topLevelMenu);
+
+    if (match.text) {
+        setTimeout(() => highlightLeftMenuItem(match.text), 30);
+    }
+    return true;
+}
+
+function scheduleTagNavSync() {
+    if (tagNavSyncTimer) clearTimeout(tagNavSyncTimer);
+    tagNavSyncTimer = setTimeout(() => {
+        const title = getActiveTagTitle();
+        if (title && title !== lastSyncedTagTitle) {
+            syncLeftMenuToActiveTab();
+        }
+    }, 80);
+}
+
+function initTagNavSync() {
+    if (tagNavObserver) {
+        tagNavObserver.disconnect();
+        tagNavObserver = null;
+    }
+
+    const nav = document.querySelector('.tags-nav');
+    if (!nav) return;
+
+    tagNavObserver = new MutationObserver(scheduleTagNavSync);
+    tagNavObserver.observe(nav, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class']
+    });
 }
 
 // 辅助函数：处理子菜单的折叠展开逻辑
@@ -1087,6 +1287,10 @@ const observer = new MutationObserver((mutations) => {
     const customContent = document.querySelector('.custom-content-con');
     if (topMenu && customContent && !topMenu.contains(customContent)) {
         relocateHeaderActions(topMenu);
+    }
+
+    if (topMenu && document.querySelector('.tags-nav') && !tagNavObserver) {
+        initTagNavSync();
     }
 });
 

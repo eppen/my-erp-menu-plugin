@@ -172,11 +172,6 @@ function applyCustomLayout() {
                 clonedUl.style.display = 'block'; // 确保显示
                 clonedUl.style.width = '100%';
                 
-                // 递归确保所有层级的 ul 都不受原有 display:none 的影响，默认全部展开
-                clonedUl.querySelectorAll('ul').forEach(u => {
-                    u.style.display = 'block';
-                });
-                
                 initSubMenuInteractions(clonedUl, text);
                 subMenuContainer.appendChild(clonedUl);
             } else {
@@ -318,6 +313,7 @@ function restoreHeaderActions() {
 function initSubMenuInteractions(rootElement, topLevelMenuName = null) {
     // 找到所有的 子菜单标题 (ivu-menu-submenu-title)
     const titles = rootElement.querySelectorAll('.ivu-menu-submenu-title');
+    let expandedFirst = false;
     
     titles.forEach(title => {
         // 对应的下一个兄弟元素应该是 ul
@@ -332,16 +328,18 @@ function initSubMenuInteractions(rootElement, topLevelMenuName = null) {
         if (nextUl && nextUl.tagName === 'UL') {
             title.style.cursor = 'pointer';
             
-            // 确保子菜单默认展开
-            nextUl.style.display = 'block';
-            nextUl.classList.remove('erp-submenu-collapsed');
-            
-            // 添加折叠指示箭头逻辑（如果原 DOM 有箭头 icon）
+            // 默认只展开第一个可折叠子菜单，其余收起
             const arrow = title.querySelector('.ivu-icon-ios-arrow-down');
-            
-            // 初始化箭头状态为展开
-            if (arrow) {
-                arrow.style.transform = 'rotate(0deg)';
+            const shouldExpand = !expandedFirst;
+            if (shouldExpand) {
+                expandedFirst = true;
+                nextUl.style.display = 'block';
+                nextUl.classList.remove('erp-submenu-collapsed');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+            } else {
+                nextUl.style.display = 'none';
+                nextUl.classList.add('erp-submenu-collapsed');
+                if (arrow) arrow.style.transform = 'rotate(-90deg)';
             }
             
             // 绑定点击事件：只折叠/展开子菜单，不影响其他菜单项

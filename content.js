@@ -1274,7 +1274,7 @@ function applyMenuCollapse(topMenuContainer) {
             
             // 点击外部关闭下拉菜单
             const closeDropdown = (e) => {
-                if (!moreMenu.contains(e.target) && !dropdownMenu.contains(e.target)) {
+                if (!moreMenu.contains(e.target)) {
                     dropdownMenu.style.display = 'none';
                     const arrow = moreMenu.querySelector('i');
                     if (arrow) {
@@ -1286,8 +1286,16 @@ function applyMenuCollapse(topMenuContainer) {
             // 使用事件委托，避免重复绑定
             document.addEventListener('click', closeDropdown);
             
-            topMenuContainer.appendChild(moreMenu);
-            topMenuContainer.appendChild(dropdownMenu);
+            // 下拉挂到「更多」内部，相对按钮定位（避免贴到整条顶栏最右侧）
+            moreMenu.appendChild(dropdownMenu);
+
+            // 「更多」与右侧顶栏操作区交换：更多紧挨菜单，操作区（消息/用户等）在最右侧
+            const rightHeaderActions = topMenuContainer.querySelector('.custom-header-actions.position-right');
+            if (rightHeaderActions) {
+                topMenuContainer.insertBefore(moreMenu, rightHeaderActions);
+            } else {
+                topMenuContainer.appendChild(moreMenu);
+            }
         }
     });
 }

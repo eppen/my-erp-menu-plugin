@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ERP Menu Layout Modifier",
-  "version": "1.2.5",
+  "version": "1.2.10",
   "description": "Modify the menu layout of the ERP system. Includes a public demo page for store review testing.",
   "icons": {
     "16": "images/icon-16.png",

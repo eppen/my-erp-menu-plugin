@@ -360,7 +360,8 @@ body.custom-layout-active .ivu-layout-sider {
 .custom-more-dropdown {
     position: absolute;
     top: 100%;
-    right: 0;
+    left: 0;
+    right: auto;
     background-color: #2d8cf0;
     min-width: 150px;
     max-width: 250px;
@@ -425,24 +426,73 @@ body.custom-layout-active .ivu-layout-sider {
     margin-left: 0;
 }
 
-.custom-top-menu-container:has(.custom-header-actions.position-right) .custom-more-menu {
+/* 有「更多」时：更多靠右推开，操作区在更多之后（最右侧） */
+.custom-top-menu-container:has(.custom-header-actions.position-right):has(.custom-more-menu) .custom-more-menu {
+    margin-left: auto;
+}
+
+.custom-top-menu-container:has(.custom-header-actions.position-right):has(.custom-more-menu) .custom-header-actions.position-right {
     margin-left: 0;
 }
 
 .custom-header-actions .custom-content-con {
     display: flex !important;
     flex-direction: row-reverse; /* 原顶栏多为 float:right，反转后视觉顺序为：图标 → 全屏 → 用户 */
-    align-items: center;
-    height: 100%;
+    align-items: center !important;
+    height: 50px !important;
     float: none !important;
     position: static !important;
+    line-height: 1 !important;
 }
 
 .custom-header-actions .full-screen-btn-con {
-    display: inline-flex;
-    align-items: center;
+    display: inline-flex !important;
+    align-items: center !important;
+    height: 50px !important;
+    line-height: 1 !important;
+    margin: 0 4px 0 0 !important;
+    padding: 0 !important;
     color: #fff !important;
-    margin-right: 8px !important;
+}
+
+.custom-header-actions .full-screen-btn-con .ivu-tooltip {
+    display: inline-flex !important;
+    align-items: center !important;
+    height: 50px !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+}
+
+/* 去掉原 44px 顶栏的 margin-top，统一在 50px 栏内垂直居中 */
+.custom-header-actions .full-screen-btn-con .ivu-tooltip-rel {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    height: 50px !important;
+    line-height: 1 !important;
+    position: relative !important;
+    top: 0 !important;
+}
+
+.custom-header-actions .full-screen-btn-con .ivu-icon {
+    font-size: 20px !important;
+    width: 20px !important;
+    height: 20px !important;
+    line-height: 20px !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    vertical-align: middle !important;
+}
+
+.custom-header-actions .full-screen-btn-con .ivu-badge {
+    position: absolute !important;
+    top: 10px !important;
+    right: 2px !important;
+    margin: 0 !important;
 }
 
 .custom-header-actions .ivu-icon,
@@ -451,10 +501,34 @@ body.custom-layout-active .ivu-layout-sider {
     color: #fff !important;
 }
 
-.custom-header-actions .user-avatar-dropdown {
-    display: inline-flex;
-    align-items: center;
+.custom-header-actions .user-avatar-dropdown,
+.custom-header-actions .user-avatar-dropdown .ivu-dropdown,
+.custom-header-actions .user-avatar-dropdown .ivu-dropdown-rel {
+    display: inline-flex !important;
+    align-items: center !important;
+    height: 50px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
     white-space: nowrap;
+    gap: 6px;
+}
+
+.custom-header-actions .user-avatar-dropdown .ivu-avatar {
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 28px !important;
+    flex-shrink: 0;
+}
+
+.custom-header-actions .user-avatar-dropdown .ivu-avatar img {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.custom-header-actions .user-avatar-dropdown .ivu-icon {
+    font-size: 16px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
 }
 
 .custom-header-actions .ivu-select-dropdown {
@@ -463,6 +537,13 @@ body.custom-layout-active .ivu-layout-sider {
 
 .custom-header-actions .ivu-tooltip-popper {
     z-index: 10050 !important;
+}
+
+/* 邮件入口不需要，直接隐藏 */
+.custom-header-actions .ivu-icon-ios-mail,
+.custom-header-actions .ivu-tooltip:has(.ivu-icon-ios-mail),
+.custom-header-actions .ivu-tooltip[title="邮件"] {
+    display: none !important;
 }
 
 /* 隐藏原 header 整行，避免插件启用后仍多占一行 */

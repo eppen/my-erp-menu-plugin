@@ -580,7 +580,7 @@ function syncLeftMenuFromMenuItem(topLevelMenu, itemText) {
     return true;
 }
 
-// 按当前内容 tab 切换左侧模块菜单并选中对应页面
+// 按当前内容 tab 同步左侧：仅路由唯一命中时才切模块；否则不切模块，只尝试高亮
 function syncLeftMenuToActiveTab(forcedInfo) {
     if (!isMenuModificationEnabled) return false;
     if (!document.querySelector('.custom-top-menu-container')) return false;
@@ -588,42 +588,49 @@ function syncLeftMenuToActiveTab(forcedInfo) {
     const info = forcedInfo || pendingSyncInfo || getActiveTagInfo();
     if (!info || !info.title) return false;
 
-    const match = findMenuMatchForTag(info);
-    if (!match || !match.topLevelMenu) {
-        const payload = {
-            title: info.title,
-            name: info.name,
-            href: info.href,
-            key: info.key,
-            id: info.id
-        };
-        if (!info.href) {
-            const activeTag = document.querySelector('.tags-nav .ivu-tag-checked')
-                || document.querySelector('.tags-nav .ivu-tag-primary');
-            const rawItem = getTagRouteItem(activeTag);
-            payload.routeItemKeys = rawItem ? Object.keys(rawItem) : null;
-            payload.routeItemSample = rawItem
-                ? {
-                    href: rawItem.href,
-                    path: rawItem.path,
-                    url: rawItem.url,
-                    name: rawItem.name,
-                    key: rawItem.key,
-                    title: rawItem.title
-                }
-                : null;
-        }
-        console.warn('ERP Menu Plugin: No left menu match for tab', payload);
-        return false;
-    }
+    const routeMatch = findMenuMatchForTag(info);
 
     lastSyncedTagKey = info.key || info.title;
-    activateTopLevelMenu(match.topLevelMenu);
 
-    if (match.text) {
-        setTimeout(() => highlightLeftMenuItem(match.text), 40);
+    if (routeMatch && routeMatch.topLevelMenu) {
+        activateTopLevelMenu(routeMatch.topLevelMenu);
+        if (routeMatch.text) {
+            setTimeout(() => highlightLeftMenuItem(routeMatch.text), 40);
+        }
+        return true;
     }
-    return true;
+
+    // 无唯一路由命中：绝不按标题切模块，仅在当前已打开的模块里按标题高亮
+    if (info.title) {
+        setTimeout(() => highlightLeftMenuItem(info.title), 40);
+    }
+
+    const payload = {
+        title: info.title,
+        name: info.name,
+        href: info.href,
+        key: info.key,
+        id: info.id,
+        currentModule: currentTopLevelMenuName
+    };
+    if (!info.href) {
+        const activeTag = document.querySelector('.tags-nav .ivu-tag-checked')
+            || document.querySelector('.tags-nav .ivu-tag-primary');
+        const rawItem = getTagRouteItem(activeTag);
+        payload.routeItemKeys = rawItem ? Object.keys(rawItem) : null;
+        payload.routeItemSample = rawItem
+            ? {
+                href: rawItem.href,
+                path: rawItem.path,
+                url: rawItem.url,
+                name: rawItem.name,
+                key: rawItem.key,
+                title: rawItem.title
+            }
+            : null;
+    }
+    console.warn('ERP Menu Plugin: Tab reverse sync skipped module switch (no unique route)', payload);
+    return false;
 }
 
 function resolveTagInfoForSync() {
@@ -1065,15 +1072,12 @@ function findOriginalMenuItemByRoute(route) {
 
 function findMenuMatchForTag(info) {
     if (!info) return null;
-    const byRoute = findOriginalMenuItemByRoute({
+    // 反向同步只认唯一路由；标题匹配不再用于切模块
+    return findOriginalMenuItemByRoute({
         name: info.name || '',
         key: info.id ? info.id.replace(/^tag-nav-/, '') : '',
         href: info.href || ''
     });
-    if (byRoute) return byRoute;
-    const byTitle = findMenuMatchForTitle(info.title);
-    if (byTitle) return byTitle;
-    return null;
 }
 
 function activateExistingTagByRoute(route, title) {

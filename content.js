@@ -11,9 +11,10 @@ let currentTopLevelMenuName = null;
 let headerActionsPosition = 'right';
 
 // 内容区 tab 与左侧菜单同步
-let lastSyncedTagTitle = null;
+let lastSyncedTagKey = null;
 let tagNavObserver = null;
 let tagNavSyncTimer = null;
+let tagNavObservedRoot = null;
 
 // 恢复原始菜单显示
 function restoreOriginalMenu() {
@@ -37,7 +38,7 @@ function restoreOriginalMenu() {
     // 移除body类
     document.body.classList.remove('custom-layout-active');
 
-    lastSyncedTagTitle = null;
+    lastSyncedTagKey = null;
     if (tagNavObserver) {
         tagNavObserver.disconnect();
         tagNavObserver = null;
@@ -46,6 +47,11 @@ function restoreOriginalMenu() {
         clearTimeout(tagNavSyncTimer);
         tagNavSyncTimer = null;
     }
+    if (tagNavPollTimer) {
+        clearInterval(tagNavPollTimer);
+        tagNavPollTimer = null;
+    }
+    tagNavObservedRoot = null;
     
     console.log('ERP Menu Plugin: Original menu restored.');
 }
@@ -326,14 +332,40 @@ function restoreHeaderActions() {
     }
 }
 
-// 读取内容区当前激活 tab 标题
-function getActiveTagTitle() {
-    const tag = document.querySelector('.tags-nav .ivu-tag-checked')
-        || document.querySelector('.tags-nav .ivu-tag-primary');
+function normalizeMenuText(text) {
+    return (text || '').replace(/\s+/g, ' ').trim();
+}
+
+function getTopLevelTitleFromLi(topLi) {
+    const topTitleEl = topLi.querySelector(':scope > .ivu-menu-submenu-title, :scope > div.ivu-menu-submenu-title');
+    const el = topTitleEl || topLi.querySelector('.ivu-menu-submenu-title');
+    if (!el) return '';
+    const span = el.querySelector('span');
+    return normalizeMenuText(span ? span.innerText : el.innerText);
+}
+
+function parseTagEl(tag) {
     if (!tag) return null;
     const textEl = tag.querySelector('.ivu-tag-text');
-    const title = (textEl ? textEl.innerText : tag.innerText).replace(/\s+/g, ' ').trim();
-    return title || null;
+    let title = normalizeMenuText(textEl ? textEl.innerText : tag.innerText);
+    let name = tag.id ? tag.id.replace(/^tag-nav-/, '') : '';
+    try {
+        const vue = tag.__vue__;
+        const item = vue && vue.$attrs && vue.$attrs['data-route-item'];
+        if (item) {
+            if (item.title) title = normalizeMenuText(item.title);
+            if (item.name) name = item.name;
+        }
+    } catch (e) {}
+    const key = tag.id || name || title;
+    if (!title && !key) return null;
+    return { title, name, id: tag.id || '', key };
+}
+
+function getActiveTagInfo() {
+    const tag = document.querySelector('.tags-nav .ivu-tag-checked')
+        || document.querySelector('.tags-nav .ivu-tag-primary');
+    return parseTagEl(tag);
 }
 
 // 根据 tab 标题在原始菜单中找对应模块和叶子项
@@ -345,60 +377,42 @@ function findMenuMatchForTitle(title) {
     if (!rootMenu) return null;
 
     const topLevelItems = Array.from(rootMenu.children).filter(node => node.tagName === 'LI');
-    const exact = [];
+    const candidates = [];
+
+    const push = (score, payload) => {
+        candidates.push(Object.assign({ score }, payload));
+    };
 
     topLevelItems.forEach(topLi => {
-        const topTitleEl = topLi.querySelector('.ivu-menu-submenu-title');
-        const topTitle = topTitleEl ? (topTitleEl.querySelector('span')?.innerText || topTitleEl.innerText || '').trim() : '';
+        const topTitle = getTopLevelTitleFromLi(topLi);
         topLi.querySelectorAll('.ivu-menu-item').forEach(item => {
-            const itemText = item.innerText.replace(/\s+/g, ' ').trim();
+            const itemText = normalizeMenuText(item.innerText);
+            if (!itemText) return;
             if (itemText === title) {
-                exact.push({
-                    text: itemText,
-                    topLevelMenu: topTitle,
-                    path: getMenuItemFullPath(item)
-                });
+                push(100, { text: itemText, topLevelMenu: topTitle });
+            } else if (itemText.length >= 2 && (title.includes(itemText) || itemText.includes(title))) {
+                push(70 + Math.min(itemText.length, 20), { text: itemText, topLevelMenu: topTitle });
             }
         });
-    });
-
-    if (exact.length === 1) return exact[0];
-    if (exact.length > 1) {
-        return exact.find(e => e.topLevelMenu === currentTopLevelMenuName) || exact[0];
-    }
-
-    let bestLeaf = null;
-    topLevelItems.forEach(topLi => {
-        const topTitleEl = topLi.querySelector('.ivu-menu-submenu-title');
-        const topTitle = topTitleEl ? (topTitleEl.querySelector('span')?.innerText || topTitleEl.innerText || '').trim() : '';
-        topLi.querySelectorAll('.ivu-menu-item').forEach(item => {
-            const itemText = item.innerText.replace(/\s+/g, ' ').trim();
-            if (!itemText || itemText.length < 2) return;
-            if (title.includes(itemText) || itemText.includes(title)) {
-                if (!bestLeaf || itemText.length > bestLeaf.text.length) {
-                    bestLeaf = {
-                        text: itemText,
-                        topLevelMenu: topTitle,
-                        path: getMenuItemFullPath(item)
-                    };
-                }
+        topLi.querySelectorAll('.ivu-menu-submenu-title').forEach(subTitle => {
+            const subText = normalizeMenuText(subTitle.querySelector('span')?.innerText || subTitle.innerText);
+            if (!subText || subText === topTitle) return;
+            if (subText === title) {
+                push(90, { text: subText, topLevelMenu: topTitle, isGroup: true });
             }
         });
-    });
-    if (bestLeaf) return bestLeaf;
-
-    let bestTop = null;
-    topLevelItems.forEach(topLi => {
-        const topTitleEl = topLi.querySelector('.ivu-menu-submenu-title');
-        const topTitle = topTitleEl ? (topTitleEl.querySelector('span')?.innerText || topTitleEl.innerText || '').trim() : '';
-        if (!topTitle) return;
-        if (title === topTitle || title.startsWith(topTitle) || title.includes(topTitle)) {
-            if (!bestTop || topTitle.length > bestTop.topLevelMenu.length) {
-                bestTop = { text: null, topLevelMenu: topTitle, path: [] };
-            }
+        if (topTitle && (title === topTitle || title.startsWith(topTitle))) {
+            push(50 + Math.min(topTitle.length, 20), { text: null, topLevelMenu: topTitle });
         }
     });
-    return bestTop;
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.score - a.score);
+    if (candidates[0].score < 100) {
+        const preferCurrent = candidates.find(c => c.topLevelMenu === currentTopLevelMenuName && c.score === candidates[0].score);
+        return preferCurrent || candidates[0];
+    }
+    return candidates[0];
 }
 
 // 展开左侧菜单中目标项的祖先，并高亮该项
@@ -414,14 +428,42 @@ function highlightLeftMenuItem(text) {
             break;
         }
     }
-    if (!target) return;
 
     container.querySelectorAll('.ivu-menu-item').forEach(i => {
         i.classList.remove('ivu-menu-item-active', 'ivu-menu-item-selected');
     });
-    target.classList.add('ivu-menu-item-active', 'ivu-menu-item-selected');
 
-    let el = target.parentElement;
+    if (target) {
+        target.classList.add('ivu-menu-item-active', 'ivu-menu-item-selected');
+        expandAncestors(target, container);
+        if (typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ block: 'nearest' });
+        }
+        return;
+    }
+
+    const titles = container.querySelectorAll('.ivu-menu-submenu-title');
+    for (const title of titles) {
+        const titleText = normalizeMenuText(title.querySelector('span')?.innerText || title.innerText);
+        if (titleText === text) {
+            const nextUl = title.nextElementSibling;
+            if (nextUl && nextUl.tagName === 'UL') {
+                nextUl.classList.remove('erp-submenu-collapsed');
+                nextUl.style.display = 'block';
+                const arrow = title.querySelector('.ivu-icon-ios-arrow-down');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+            }
+            expandAncestors(title, container);
+            if (typeof title.scrollIntoView === 'function') {
+                title.scrollIntoView({ block: 'nearest' });
+            }
+            break;
+        }
+    }
+}
+
+function expandAncestors(startEl, container) {
+    let el = startEl.parentElement;
     while (el && el !== container) {
         if (el.tagName === 'UL') {
             el.classList.remove('erp-submenu-collapsed');
@@ -434,10 +476,6 @@ function highlightLeftMenuItem(text) {
         }
         el = el.parentElement;
     }
-
-    if (typeof target.scrollIntoView === 'function') {
-        target.scrollIntoView({ block: 'nearest' });
-    }
 }
 
 function activateTopLevelMenu(topLevelMenuName) {
@@ -446,7 +484,8 @@ function activateTopLevelMenu(topLevelMenuName) {
     if (!topMenuContainer) return false;
     const topItems = topMenuContainer.querySelectorAll('.custom-top-menu-item:not(.favorites-tab):not(.custom-more-menu)');
     for (const item of topItems) {
-        const topText = item.querySelector('span')?.innerText || '';
+        const spans = item.querySelectorAll('span');
+        const topText = Array.from(spans).map(s => s.innerText.trim()).filter(Boolean).pop() || '';
         if (topText === topLevelMenuName) {
             if (!item.classList.contains('active')) {
                 item.click();
@@ -458,54 +497,80 @@ function activateTopLevelMenu(topLevelMenuName) {
 }
 
 // 按当前内容 tab 切换左侧模块菜单并选中对应页面
-function syncLeftMenuToActiveTab() {
+function syncLeftMenuToActiveTab(forcedInfo) {
     if (!isMenuModificationEnabled) return false;
     if (!document.querySelector('.custom-top-menu-container')) return false;
 
-    const title = getActiveTagTitle();
-    if (!title) return false;
-    if (title === lastSyncedTagTitle && document.querySelector('.custom-top-menu-item.active:not(.favorites-tab)')) {
-        return true;
-    }
+    const info = forcedInfo || getActiveTagInfo();
+    if (!info || !info.title) return false;
 
-    const match = findMenuMatchForTitle(title);
+    const match = findMenuMatchForTitle(info.title);
     if (!match || !match.topLevelMenu) return false;
 
-    lastSyncedTagTitle = title;
+    lastSyncedTagKey = info.key || info.title;
     activateTopLevelMenu(match.topLevelMenu);
 
     if (match.text) {
-        setTimeout(() => highlightLeftMenuItem(match.text), 30);
+        setTimeout(() => highlightLeftMenuItem(match.text), 40);
     }
     return true;
 }
 
-function scheduleTagNavSync() {
+function scheduleTagNavSync(forcedInfo) {
     if (tagNavSyncTimer) clearTimeout(tagNavSyncTimer);
     tagNavSyncTimer = setTimeout(() => {
-        const title = getActiveTagTitle();
-        if (title && title !== lastSyncedTagTitle) {
-            syncLeftMenuToActiveTab();
-        }
-    }, 80);
+        const info = forcedInfo || getActiveTagInfo();
+        if (!info) return;
+        if (info.key && info.key === lastSyncedTagKey) return;
+        syncLeftMenuToActiveTab(info);
+    }, 40);
+}
+
+function onTagNavClick(e) {
+    if (!isMenuModificationEnabled) return;
+    const tag = e.target && e.target.closest && e.target.closest('.tags-nav .ivu-tag');
+    if (!tag) return;
+    scheduleTagNavSync(parseTagEl(tag));
 }
 
 function initTagNavSync() {
+    const root = document.querySelector('.tag-nav-wrapper')
+        || document.querySelector('.tags-nav')
+        || document.querySelector('.main-content-con');
+
+    if (tagNavObserver && tagNavObservedRoot && document.contains(tagNavObservedRoot) && tagNavObservedRoot === root) {
+        return;
+    }
+
     if (tagNavObserver) {
         tagNavObserver.disconnect();
         tagNavObserver = null;
     }
 
-    const nav = document.querySelector('.tags-nav');
-    if (!nav) return;
+    if (root) {
+        tagNavObservedRoot = root;
+        tagNavObserver = new MutationObserver(() => scheduleTagNavSync());
+        tagNavObserver.observe(root, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    }
 
-    tagNavObserver = new MutationObserver(scheduleTagNavSync);
-    tagNavObserver.observe(nav, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class']
-    });
+    document.removeEventListener('click', onTagNavClick, true);
+    document.addEventListener('click', onTagNavClick, true);
+
+    if (!tagNavPollTimer) {
+        tagNavPollTimer = setInterval(() => {
+            if (!isMenuModificationEnabled) return;
+            if (!document.querySelector('.custom-top-menu-container')) return;
+            const info = getActiveTagInfo();
+            if (info && info.key && info.key !== lastSyncedTagKey) {
+                syncLeftMenuToActiveTab(info);
+            }
+        }, 400);
+    }
 }
 
 // 辅助函数：处理子菜单的折叠展开逻辑
@@ -1289,7 +1354,7 @@ const observer = new MutationObserver((mutations) => {
         relocateHeaderActions(topMenu);
     }
 
-    if (topMenu && document.querySelector('.tags-nav') && !tagNavObserver) {
+    if (topMenu && document.querySelector('.tags-nav')) {
         initTagNavSync();
     }
 });

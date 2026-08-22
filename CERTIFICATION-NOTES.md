@@ -8,7 +8,7 @@
 
 ```text
 Extension name: ERP Menu Layout Modifier
-Version: 1.2.24
+Version: 1.2.27
 
 Purpose:
 Transforms a left sidebar ERP menu into a top navigation bar + left sub-menu layout.
@@ -43,7 +43,7 @@ Production matches also include internal ERP hosts that reviewers cannot reach; 
 
 ## 中文备忘（勿贴到商店时可自用）
 
-- 当前版本：`1.2.24`
+- 当前版本：`1.2.27`
 - Demo 地址：`https://eppen.github.io/my-erp-menu-plugin/demo/`
 - 隐私政策：`https://eppen.github.io/my-erp-menu-plugin/privacy.html`
 - 需先把本仓库推送到 GitHub，并开启 GitHub Pages（Source: Deploy from branch `master` / `main`，Folder: `/ (root)`）

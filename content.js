@@ -10,6 +10,9 @@ let currentTopLevelMenuName = null;
 // 顶栏操作区位置：'left' | 'right'
 let headerActionsPosition = 'right';
 
+// 左侧子菜单整栏收起状态（内存态，避免 storage 异步竞态）
+let leftSiderCollapsed = false;
+
 // 内容区 tab 与左侧菜单同步
 let lastSyncedTagKey = null;
 let tagNavObserver = null;
@@ -196,6 +199,7 @@ function restoreOriginalMenu() {
 
     // 先把原顶栏控件移回原位（必须在移除插件顶栏之前）
     restoreHeaderActions();
+    restoreSiderTrigger();
     
     // 移除自定义布局元素
     const topMenuContainer = document.querySelector('.custom-top-menu-container');
@@ -393,6 +397,9 @@ function applyCustomLayout() {
     // 将原页面右上角按钮/下拉迁入插件顶栏，并隐藏原 header 行
     relocateHeaderActions(topMenuContainer);
 
+    // 迁移侧栏折叠按钮并接管左侧子菜单整栏收起
+    initLeftSiderCollapse(topMenuContainer);
+
     // 按当前内容区 tab 同步左侧模块；没有 tab 时才默认第一个模块
     setTimeout(() => {
         if (!syncLeftMenuToActiveTab()) {
@@ -507,6 +514,84 @@ function restoreHeaderActions() {
         headerCon.style.padding = '';
         headerCon.style.overflow = '';
     }
+}
+
+// 还原侧栏折叠按钮
+function restoreSiderTrigger() {
+    const topMenuContainer = document.querySelector('.custom-top-menu-container');
+    const trigger = topMenuContainer
+        ? topMenuContainer.querySelector('.custom-sider-trigger')
+        : null;
+
+    if (trigger && trigger.__erpSiderToggleHandler) {
+        trigger.removeEventListener('click', trigger.__erpSiderToggleHandler, true);
+        delete trigger.__erpSiderToggleHandler;
+    }
+
+    if (trigger) {
+        trigger.remove();
+    }
+
+    document.body.classList.remove('custom-sider-collapsed');
+    leftSiderCollapsed = false;
+}
+
+// 迁移侧栏折叠按钮到插件顶栏，并接管左侧子菜单整栏收起
+function initLeftSiderCollapse(topMenuContainer) {
+    if (!topMenuContainer) return;
+
+    let trigger = topMenuContainer.querySelector('.custom-sider-trigger');
+    if (trigger && trigger.__erpSiderToggleHandler) {
+        applyLeftSiderCollapsedState(topMenuContainer);
+        return;
+    }
+
+    if (!trigger) {
+        trigger = document.createElement('a');
+        trigger.className = 'custom-sider-trigger';
+        trigger.href = 'javascript:;';
+        trigger.title = '折叠侧栏';
+        trigger.setAttribute('aria-label', '折叠侧栏');
+        trigger.textContent = '☰';
+
+        const logo = topMenuContainer.querySelector('.custom-top-logo');
+        if (logo) {
+            topMenuContainer.insertBefore(trigger, logo);
+        } else {
+            topMenuContainer.insertBefore(trigger, topMenuContainer.firstChild);
+        }
+    }
+
+    if (trigger.__erpSiderToggleHandler) {
+        trigger.removeEventListener('click', trigger.__erpSiderToggleHandler, true);
+    }
+
+    const handler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        leftSiderCollapsed = !leftSiderCollapsed;
+        document.body.classList.toggle('custom-sider-collapsed', leftSiderCollapsed);
+        chrome.storage.sync.set({ leftSiderCollapsed });
+        const collapseFunc = topMenuContainer.__collapseFunc;
+        if (collapseFunc) {
+            setTimeout(collapseFunc, 50);
+        }
+    };
+    trigger.__erpSiderToggleHandler = handler;
+    trigger.addEventListener('click', handler, true);
+
+    applyLeftSiderCollapsedState(topMenuContainer);
+}
+
+function applyLeftSiderCollapsedState(topMenuContainer) {
+    chrome.storage.sync.get(['leftSiderCollapsed'], (result) => {
+        leftSiderCollapsed = result.leftSiderCollapsed === true;
+        document.body.classList.toggle('custom-sider-collapsed', leftSiderCollapsed);
+        if (leftSiderCollapsed && topMenuContainer && topMenuContainer.__collapseFunc) {
+            setTimeout(topMenuContainer.__collapseFunc, 50);
+        }
+    });
 }
 
 function normalizeMenuText(text) {
@@ -1882,6 +1967,10 @@ const observer = new MutationObserver((mutations) => {
     const customContent = document.querySelector('.custom-content-con');
     if (topMenu && customContent && !topMenu.contains(customContent)) {
         relocateHeaderActions(topMenu);
+    }
+
+    if (topMenu && !topMenu.querySelector('.custom-sider-trigger')) {
+        initLeftSiderCollapse(topMenu);
     }
 
     if (topMenu && document.querySelector('.tags-nav')) {

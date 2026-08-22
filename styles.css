@@ -1,3 +1,27 @@
+/* 侧栏折叠按钮（迁入插件顶栏） */
+.custom-top-menu-container .custom-sider-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 50px;
+    padding: 0 14px;
+    color: #fff !important;
+    text-decoration: none;
+    font-size: 20px;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.custom-top-menu-container .custom-sider-trigger:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.custom-top-menu-container .custom-sider-trigger .ivu-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
 /* Logo 样式 */
 .custom-top-logo {
     display: flex;
@@ -69,9 +93,19 @@
     background-color: #515a6e; /* 深色主题背景 */
     color: rgba(255,255,255,0.7);
     overflow-y: auto;
+    overflow-x: hidden;
     z-index: 9999;
     padding-top: 10px;
     box-shadow: 2px 0 6px rgba(0,0,0,0.1);
+    transition: width 0.2s, padding 0.2s;
+}
+
+/* 左侧子菜单整栏收起 */
+body.custom-layout-active.custom-sider-collapsed .custom-sub-menu-container {
+    width: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    box-shadow: none;
 }
 
 /* 调整页面主体，防止被固定定位元素遮挡 */
@@ -80,13 +114,31 @@ body.custom-layout-active {
 }
 
 /* 适配右侧内容区域 - 针对 iView Admin 常见结构 */
-/* .main.ivu-layout 是最外层容器，.main-content-con 是内容区 */
-body.custom-layout-active .main.ivu-layout,
-body.custom-layout-active .ivu-layout-has-sider,
-body.custom-layout-active .main-content-con {
-    margin-left: 120px !important; /* 给左侧子菜单留出空间 */
-    width: auto !important; /* 让宽度自适应，减去 margin */
+/* 侧栏为 fixed，仅最外层布局留白；内层同类容器 margin 清零，避免与菜单之间出现双倍空隙 */
+body.custom-layout-active:not(.custom-sider-collapsed) .ivu-layout-has-sider,
+body.custom-layout-active:not(.custom-sider-collapsed) .main.ivu-layout {
+    margin-left: 240px !important;
+    width: auto !important;
     transition: margin-left 0.2s;
+}
+
+body.custom-layout-active:not(.custom-sider-collapsed) .main-content-con {
+    margin-left: 240px !important;
+    width: auto !important;
+    transition: margin-left 0.2s;
+}
+
+/* 嵌套在内层时不再重复留白 */
+body.custom-layout-active .ivu-layout-has-sider .main.ivu-layout,
+body.custom-layout-active .ivu-layout-has-sider .main-content-con,
+body.custom-layout-active .main.ivu-layout .main-content-con {
+    margin-left: 0 !important;
+}
+
+body.custom-layout-active.custom-sider-collapsed .main.ivu-layout,
+body.custom-layout-active.custom-sider-collapsed .ivu-layout-has-sider,
+body.custom-layout-active.custom-sider-collapsed .main-content-con {
+    margin-left: 0 !important;
 }
 
 /* 如果原有左侧边栏占位还在，尝试强制折叠或隐藏其占位 */

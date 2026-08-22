@@ -1,8 +1,8 @@
 {
   "my-erp-menu-plugin:9591": {
-    "state": 2,
-    "last_updated": "2026-04-16T11:47:37.722937+08:00",
-    "event": "Notification:permission_prompt",
+    "state": 4,
+    "last_updated": "2026-04-16T12:00:05.252791+08:00",
+    "event": "SessionEnd",
     "directory_name": "my-erp-menu-plugin"
   }
 }

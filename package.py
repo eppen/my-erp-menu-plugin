@@ -6,27 +6,40 @@
 支持输出：
 * Chrome 商店安装包
 * Edge 外接程序商店安装包
+* Firefox 附加组件安装包（.xpi）
 """
 
 import argparse
+import json
 import zipfile
 from pathlib import Path
 
 
 def _load_version(plugin_dir: Path) -> str:
     """从 manifest.json 中读取版本号"""
-    import json
-
     manifest_path = plugin_dir / "manifest.json"
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
     return manifest.get("version", "1.0.0")
 
 
+def _load_manifest_for_target(plugin_dir: Path, target: str) -> tuple[str, dict]:
+    """读取目标浏览器对应的 manifest 内容"""
+    if target == "firefox":
+        manifest_path = plugin_dir / "manifest.firefox.json"
+    else:
+        manifest_path = plugin_dir / "manifest.json"
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    manifest["version"] = _load_version(plugin_dir)
+    return manifest_path.name, manifest
+
+
 def _collect_files(plugin_dir: Path):
     """返回需要打包的文件列表"""
     files_to_include = [
-        "manifest.json",
         "background.js",
         "content.js",
         "popup.html",
@@ -45,15 +58,16 @@ def _collect_files(plugin_dir: Path):
 
 def package_for_target(target: str) -> Path:
     """
-    为指定目标（chrome / edge）打包
+    为指定目标（chrome / edge / firefox）打包
 
-    目前 Chrome 与 Edge 使用同一套源码与 manifest，
-    区别仅在于输出 zip 的命名，方便分别上传到各自商店。
+    Chrome、Edge 使用 service_worker 版 manifest；
+    Firefox 使用 manifest.firefox.json（background.scripts）。
     """
     # 获取脚本所在目录
     plugin_dir = Path(__file__).parent.resolve()
 
     version = _load_version(plugin_dir)
+    manifest_source, manifest = _load_manifest_for_target(plugin_dir, target)
     files_to_include, icon_files = _collect_files(plugin_dir)
 
     # 输出目录：dist/<target>/
@@ -66,6 +80,8 @@ def package_for_target(target: str) -> Path:
         zip_filename = f"my-erp-menu-plugin-chrome-v{version}.zip"
     elif target == "edge":
         zip_filename = f"my-erp-menu-plugin-edge-v{version}.zip"
+    elif target == "firefox":
+        zip_filename = f"my-erp-menu-plugin-firefox-v{version}.xpi"
     else:
         raise ValueError(f"未知打包目标: {target}")
 
@@ -75,6 +91,9 @@ def package_for_target(target: str) -> Path:
     print(f"输出文件: {zip_path.relative_to(plugin_dir)}")
 
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+        print(f"  + manifest.json (from {manifest_source})")
+
         # 添加主要文件
         for file in files_to_include:
             file_path = plugin_dir / file
@@ -104,15 +123,15 @@ def main():
     parser = argparse.ArgumentParser(description="打包 ERP Menu Layout Modifier 扩展")
     parser.add_argument(
         "--target",
-        choices=["chrome", "edge", "all"],
+        choices=["chrome", "edge", "firefox", "all"],
         default="all",
-        help="打包目标浏览器（默认 all）",
+        help="打包目标浏览器（默认 all，含 firefox）",
     )
     args = parser.parse_args()
 
     targets = []
     if args.target == "all":
-        targets = ["chrome", "edge"]
+        targets = ["chrome", "edge", "firefox"]
     else:
         targets = [args.target]
 

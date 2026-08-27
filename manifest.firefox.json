@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "my-erp-menu-modifier@eppen.github.io",
+      "strict_min_version": "109.0"
+    }
+  },
+  "name": "ERP Menu Layout Modifier",
+  "version": "1.2.27",
+  "description": "Modify the menu layout of the ERP system. Includes a public demo page for store review testing.",
+  "icons": {
+    "16": "images/icon-16.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon-16.png",
+      "48": "images/icon-48.png",
+      "128": "images/icon-128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://60.190.250.202/*",
+        "http://10.10.8.149/*",
+        "http://10.10.8.137/*",
+        "https://eppen.github.io/my-erp-menu-plugin/*",
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}

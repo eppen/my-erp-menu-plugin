@@ -48,6 +48,46 @@ function resumeAutoTagSync() {
     suspendedMenuHint = null;
 }
 
+function clearElement(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function appendText(parent, text, tagName, className) {
+    const node = tagName ? document.createElement(tagName) : document.createTextNode(text);
+    if (tagName) {
+        node.textContent = text;
+        if (className) node.className = className;
+        parent.appendChild(node);
+        return node;
+    }
+    parent.appendChild(node);
+    return node;
+}
+
+function appendHighlightedText(parent, text, query) {
+    const source = text == null ? '' : String(text);
+    if (!query) {
+        parent.textContent = source;
+        return;
+    }
+    const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(source)) !== null) {
+        if (match.index > lastIndex) {
+            parent.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+        }
+        const mark = document.createElement('mark');
+        mark.textContent = match[0];
+        parent.appendChild(mark);
+        lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < source.length) {
+        parent.appendChild(document.createTextNode(source.slice(lastIndex)));
+    }
+}
+
 function normalizeHrefKey(href) {
     if (!href) return '';
     return String(href).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
@@ -333,12 +373,10 @@ function applyCustomLayout() {
         const titleDiv = li.querySelector('.ivu-menu-submenu-title') || li;
         
         // 提取图标和文字
-        let iconHTML = '';
         let text = '';
         const iconNode = titleDiv.querySelector('i');
         const spanNode = titleDiv.querySelector('span');
 
-        if (iconNode) iconHTML = iconNode.outerHTML;
         if (spanNode) text = spanNode.innerText;
         if (!text) text = titleDiv.innerText.replace(/[\n\r]+|[\s]{2,}/g, ' ').trim();
 
@@ -350,7 +388,8 @@ function applyCustomLayout() {
         // 创建顶栏元素
         const topMenuItem = document.createElement('div');
         topMenuItem.className = 'custom-top-menu-item';
-        topMenuItem.innerHTML = `${iconHTML}<span>${text}</span>`;
+        if (iconNode) topMenuItem.appendChild(iconNode.cloneNode(true));
+        appendText(topMenuItem, text, 'span');
         // 添加 title 属性以便鼠标悬停查看
         topMenuItem.title = text;
         
@@ -366,7 +405,7 @@ function applyCustomLayout() {
             topMenuItem.classList.add('active');
 
             // 清空并重新填充子菜单区域
-            subMenuContainer.innerHTML = '';
+            clearElement(subMenuContainer);
             
             if (subMenuUl) {
                 // 克隆一份子菜单 DOM
@@ -377,7 +416,10 @@ function applyCustomLayout() {
                 initSubMenuInteractions(clonedUl, text);
                 subMenuContainer.appendChild(clonedUl);
             } else {
-                subMenuContainer.innerHTML = '<div class="no-submenu-tip">无子菜单</div>';
+                const tip = document.createElement('div');
+                tip.className = 'no-submenu-tip';
+                tip.textContent = '无子菜单';
+                subMenuContainer.appendChild(tip);
                 // 如果是叶子节点，触发点击
                 // li.click(); // 可选：视业务逻辑是否需要点击这里就跳转
             }
@@ -1449,7 +1491,7 @@ function addFavoriteButton(menuItem, topLevelMenuName = null) {
     
     const favoriteBtn = document.createElement('span');
     favoriteBtn.className = `favorite-btn ${isFavorite ? 'favorited' : ''}`;
-    favoriteBtn.innerHTML = isFavorite ? '★' : '☆';
+    favoriteBtn.textContent = isFavorite ? '★' : '☆';
     favoriteBtn.title = isFavorite ? '取消收藏' : '添加到收藏';
     
     favoriteBtn.addEventListener('click', (e) => {
@@ -1495,7 +1537,7 @@ function toggleFavorite(menuItem, itemText, favoriteBtn, topLevelMenuName = null
         // 取消收藏
         favoriteMenuItems.splice(index, 1);
         favoriteBtn.classList.remove('favorited');
-        favoriteBtn.innerHTML = '☆';
+        favoriteBtn.textContent = '☆';
         favoriteBtn.title = '添加到收藏';
         console.log('ERP Menu Plugin: Removed from favorites:', itemText, 'path:', fullPath);
     } else {
@@ -1511,7 +1553,7 @@ function toggleFavorite(menuItem, itemText, favoriteBtn, topLevelMenuName = null
             routeHref: route.href || ''
         });
         favoriteBtn.classList.add('favorited');
-        favoriteBtn.innerHTML = '★';
+        favoriteBtn.textContent = '★';
         favoriteBtn.title = '取消收藏';
         console.log('ERP Menu Plugin: Added to favorites:', itemText, 'path:', fullPath);
     }
@@ -1551,7 +1593,11 @@ function getMenuItemPath(menuItem) {
 function addFavoritesTab(topMenuContainer) {
     const favoritesTab = document.createElement('div');
     favoritesTab.className = 'custom-top-menu-item favorites-tab';
-    favoritesTab.innerHTML = '<span style="margin-right: 6px;">★</span><span>收藏</span>';
+    const starSpan = document.createElement('span');
+    starSpan.style.marginRight = '6px';
+    starSpan.textContent = '★';
+    favoritesTab.appendChild(starSpan);
+    appendText(favoritesTab, '收藏', 'span');
     favoritesTab.title = '收藏的菜单项';
 
     const favoritesDropdown = document.createElement('div');
@@ -1561,7 +1607,7 @@ function addFavoritesTab(topMenuContainer) {
 
     const hideFavoritesDropdown = () => {
         favoritesDropdown.style.display = 'none';
-        favoritesDropdown.innerHTML = '';
+        clearElement(favoritesDropdown);
         favoritesTab.classList.remove('favorites-open');
     };
 
@@ -1575,7 +1621,7 @@ function addFavoritesTab(topMenuContainer) {
         const searchDropdown = topMenuContainer.querySelector('.menu-search-dropdown');
         if (searchDropdown) {
             searchDropdown.style.display = 'none';
-            searchDropdown.innerHTML = '';
+            clearElement(searchDropdown);
         }
         favoritesTab.classList.add('favorites-open');
         showFavoritesList(favoritesDropdown, hideFavoritesDropdown);
@@ -1616,11 +1662,19 @@ function addFavoritesTab(topMenuContainer) {
 
 // 在悬浮层显示收藏列表
 function showFavoritesList(favoritesDropdown, hideFavoritesDropdown) {
-    favoritesDropdown.innerHTML = '';
+    clearElement(favoritesDropdown);
     favoritesDropdown.style.display = 'block';
 
     if (favoriteMenuItems.length === 0) {
-        favoritesDropdown.innerHTML = '<div class="favorites-dropdown-header">暂无收藏的菜单项<br/><small style="opacity:0.75;">点击菜单项旁的☆图标可添加到收藏</small></div>';
+        const empty = document.createElement('div');
+        empty.className = 'favorites-dropdown-header';
+        empty.appendChild(document.createTextNode('暂无收藏的菜单项'));
+        empty.appendChild(document.createElement('br'));
+        const small = document.createElement('small');
+        small.style.opacity = '0.75';
+        small.textContent = '点击菜单项旁的☆图标可添加到收藏';
+        empty.appendChild(small);
+        favoritesDropdown.appendChild(empty);
         return;
     }
 
@@ -1640,20 +1694,24 @@ function showFavoritesList(favoritesDropdown, hideFavoritesDropdown) {
         li.className = 'ivu-menu-item favorite-item';
 
         const pathText = fav.path && fav.path.length > 0 ? fav.path.join(' > ') : '';
-        li.innerHTML = `
-            <div class="favorite-item-main">
-                ${pathText ? `<div class="favorite-item-path">${pathText}</div>` : ''}
-                <div class="favorite-item-text">${fav.text}</div>
-            </div>
-            <span class="favorite-btn favorited" title="取消收藏">★</span>
-        `;
+        const main = document.createElement('div');
+        main.className = 'favorite-item-main';
+        if (pathText) appendText(main, pathText, 'div', 'favorite-item-path');
+        appendText(main, fav.text || '', 'div', 'favorite-item-text');
+        li.appendChild(main);
 
-        li.querySelector('.favorite-item-main').addEventListener('click', (e) => {
+        const starBtn = document.createElement('span');
+        starBtn.className = 'favorite-btn favorited';
+        starBtn.title = '取消收藏';
+        starBtn.textContent = '★';
+        li.appendChild(starBtn);
+
+        main.addEventListener('click', (e) => {
             e.stopPropagation();
             openFavorite(fav);
         });
 
-        li.querySelector('.favorite-btn').addEventListener('click', (e) => {
+        starBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
             const itemIndex = favoriteMenuItems.findIndex(item => {
@@ -1688,7 +1746,7 @@ function updateFavoritesTab() {
     if (open) {
         showFavoritesList(favoritesDropdown, () => {
             favoritesDropdown.style.display = 'none';
-            favoritesDropdown.innerHTML = '';
+            clearElement(favoritesDropdown);
             favoritesTab.classList.remove('favorites-open');
         });
     }
@@ -1701,7 +1759,7 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
     
     const searchIcon = document.createElement('span');
     searchIcon.className = 'menu-search-icon';
-    searchIcon.innerHTML = '🔍';
+    searchIcon.textContent = '🔍';
     
     const searchInput = document.createElement('input');
     searchInput.type = 'text';
@@ -1727,7 +1785,7 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
 
     const hideSearchDropdown = () => {
         searchDropdown.style.display = 'none';
-        searchDropdown.innerHTML = '';
+        clearElement(searchDropdown);
     };
     
     // 搜索功能
@@ -1744,7 +1802,7 @@ function addSearchBox(topMenuContainer, subMenuContainer, rootMenuConfig) {
                 const favTab = topMenuContainer.querySelector('.favorites-tab');
                 if (favDropdown) {
                     favDropdown.style.display = 'none';
-                    favDropdown.innerHTML = '';
+                    clearElement(favDropdown);
                 }
                 if (favTab) favTab.classList.remove('favorites-open');
                 performSearch(query, searchDropdown, rootMenuConfig);
@@ -1850,17 +1908,25 @@ function getMenuItemFullPathFromOriginal(menuItem) {
 
 // 在悬浮层显示搜索结果（不改写左侧子菜单）
 function displaySearchResults(results, searchDropdown, query) {
-    searchDropdown.innerHTML = '';
+    clearElement(searchDropdown);
     searchDropdown.style.display = 'block';
     
     if (results.length === 0) {
-        searchDropdown.innerHTML = `<div class="search-results-header">未找到匹配的菜单项<br/><small style="opacity:0.75;">搜索关键词: "${query}"</small></div>`;
+        const empty = document.createElement('div');
+        empty.className = 'search-results-header';
+        empty.appendChild(document.createTextNode('未找到匹配的菜单项'));
+        empty.appendChild(document.createElement('br'));
+        const small = document.createElement('small');
+        small.style.opacity = '0.75';
+        small.textContent = `搜索关键词: "${query}"`;
+        empty.appendChild(small);
+        searchDropdown.appendChild(empty);
         return;
     }
     
     const header = document.createElement('div');
     header.className = 'search-results-header';
-    header.innerHTML = `找到 ${results.length} 个匹配项`;
+    header.textContent = `找到 ${results.length} 个匹配项`;
     searchDropdown.appendChild(header);
 
     const resultsList = document.createElement('ul');
@@ -1872,13 +1938,11 @@ function displaySearchResults(results, searchDropdown, query) {
         li.className = 'ivu-menu-item search-result-item';
         
         const pathText = result.path.length > 0 ? result.path.join(' > ') + ' > ' : '';
-        const displayText = result.text;
-        const highlightedText = highlightMatch(displayText, query);
-        
-        li.innerHTML = `
-            <div class="search-result-path">${pathText}</div>
-            <div class="search-result-text">${highlightedText}</div>
-        `;
+        if (pathText) appendText(li, pathText, 'div', 'search-result-path');
+        const textEl = document.createElement('div');
+        textEl.className = 'search-result-text';
+        appendHighlightedText(textEl, result.text, query);
+        li.appendChild(textEl);
         
         li.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1891,19 +1955,11 @@ function displaySearchResults(results, searchDropdown, query) {
             });
             li.classList.add('search-result-item-active');
         });
-        
+
         resultsList.appendChild(li);
     });
-    
-    searchDropdown.appendChild(resultsList);
-}
 
-// 高亮匹配的文本
-function highlightMatch(text, query) {
-    if (!query) return text;
-    
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    return text.replace(regex, '<mark>$1</mark>');
+    searchDropdown.appendChild(resultsList);
 }
 
 // 从存储中读取开关状态
@@ -2098,7 +2154,13 @@ function applyMenuCollapse(topMenuContainer) {
             // 创建"更多"菜单按钮（样式与左侧模块菜单项一致）
             const moreMenu = document.createElement('div');
             moreMenu.className = 'custom-top-menu-item custom-more-menu';
-            moreMenu.innerHTML = '<i class="ivu-icon ivu-icon-ios-more"></i><span>更多</span><i class="ivu-icon ivu-icon-ios-arrow-down custom-more-arrow"></i>';
+            const moreIcon = document.createElement('i');
+            moreIcon.className = 'ivu-icon ivu-icon-ios-more';
+            moreMenu.appendChild(moreIcon);
+            appendText(moreMenu, '更多', 'span');
+            const moreArrow = document.createElement('i');
+            moreArrow.className = 'ivu-icon ivu-icon-ios-arrow-down custom-more-arrow';
+            moreMenu.appendChild(moreArrow);
             moreMenu.title = `更多菜单 (${itemsToCollapse.length}项)`;
             
             // 创建下拉菜单容器
@@ -2111,10 +2173,12 @@ function applyMenuCollapse(topMenuContainer) {
                 const dropdownItem = document.createElement('div');
                 dropdownItem.className = 'custom-top-menu-item custom-dropdown-item';
                 
-                // 复制菜单项的内容
+                // 复制菜单项的内容（移动克隆子节点，避免 innerHTML）
                 const itemContent = item.cloneNode(true);
-                dropdownItem.innerHTML = itemContent.innerHTML;
-                dropdownItem.title = item.title || itemContent.querySelector('span')?.innerText || '';
+                while (itemContent.firstChild) {
+                    dropdownItem.appendChild(itemContent.firstChild);
+                }
+                dropdownItem.title = item.title || item.querySelector('span')?.innerText || '';
                 
                 // 复制激活状态
                 if (item.classList.contains('active')) {

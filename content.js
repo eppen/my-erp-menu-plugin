@@ -10,9 +10,6 @@ let currentTopLevelMenuName = null;
 // 顶栏操作区位置：'left' | 'right'
 let headerActionsPosition = 'right';
 
-// 是否将菜单绝对 URL 改写为当前入口 origin
-let rewriteMenuHrefToEntry = true;
-
 // 左侧子菜单整栏收起状态（内存态，避免 storage 异步竞态）
 let leftSiderCollapsed = false;
 
@@ -91,35 +88,9 @@ function appendHighlightedText(parent, text, query) {
     }
 }
 
-// 将菜单绝对 URL 的 origin 改写为当前入口（受 rewriteMenuHrefToEntry 开关控制）
-function rewriteHrefToEntryOrigin(href) {
-    if (!href) return '';
-    const raw = String(href);
-    const isAbsolute = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
-    if (!rewriteMenuHrefToEntry) {
-        if (isAbsolute) console.log('ERP Menu Plugin: [rewrite] skipped (switch off):', raw);
-        return raw;
-    }
-    // 相对路径（/foo、./foo、foo）保持原样
-    if (!isAbsolute) return raw;
-    try {
-        const u = new URL(raw, window.location.href);
-        if (u.origin === window.location.origin) {
-            console.log('ERP Menu Plugin: [rewrite] same origin keep:', raw);
-            return raw;
-        }
-        const next = window.location.origin + u.pathname + u.search + u.hash;
-        console.log('ERP Menu Plugin: [rewrite] rewritten:', raw, '->', next);
-        return next;
-    } catch (e) {
-        console.warn('ERP Menu Plugin: [rewrite] parse fail:', raw, e);
-        return raw;
-    }
-}
-
 function normalizeHrefKey(href) {
     if (!href) return '';
-    return rewriteHrefToEntryOrigin(href).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
+    return String(href).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
 }
 
 // 生成索引 key。不含 title（同名页面会互相覆盖），只使用较稳定的 id/name/key/href
@@ -699,7 +670,7 @@ function getTagRouteItem(tag) {
 function pickRouteHref(item) {
     if (!item || typeof item !== 'object') return '';
     const raw = item.href || item.path || item.url || '';
-    return raw ? rewriteHrefToEntryOrigin(raw) : '';
+    return raw ? String(raw) : '';
 }
 
 function parseTagEl(tag) {
@@ -1304,7 +1275,7 @@ function getMenuItemRouteInfo(el) {
     const takeName = (v) => take('name', v);
     const takeKey = (v) => take('key', v);
     const takeHref = (v) => {
-        if (v && typeof v === 'string' && !info.href) info.href = rewriteHrefToEntryOrigin(v);
+        if (v && typeof v === 'string' && !info.href) info.href = v;
     };
     try {
         let node = el;
@@ -1349,8 +1320,8 @@ function getTagRouteHref(tag) {
 
 function hrefLooseEqual(a, b) {
     if (!a || !b) return false;
-    const na = rewriteHrefToEntryOrigin(a).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
-    const nb = rewriteHrefToEntryOrigin(b).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
+    const na = String(a).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
+    const nb = String(b).replace(/^\.\//, '').replace(/^\//, '').replace(/\/+$/, '');
     if (na === nb) return true;
     const segA = na.split('/').filter(Boolean);
     const segB = nb.split('/').filter(Boolean);
@@ -1456,87 +1427,13 @@ function openFavorite(fav) {
     if (topMenu) syncLeftMenuFromMenuItem(topMenu, fav.text);
 }
 
-// 点击前把原菜单 Vue 上的异源绝对 URL 写回为入口 origin，保证真实跳转也走入口
-function alignMenuItemHrefToEntry(el) {
-    console.log('ERP Menu Plugin: [align] start, switch=', rewriteMenuHrefToEntry, 'entry=', window.location.origin, 'el=', el && el.tagName);
-    if (!rewriteMenuHrefToEntry || !el) return;
-    let patched = 0;
-    const patchValue = (obj, key, source) => {
-        if (!obj || typeof obj !== 'object' || !(key in obj)) return;
-        const cur = obj[key];
-        if (typeof cur !== 'string' || !cur) return;
-        const next = rewriteHrefToEntryOrigin(cur);
-        if (next !== cur) {
-            obj[key] = next;
-            patched++;
-            console.log('ERP Menu Plugin: [align] patched', source + '.' + key, cur, '->', next);
-        }
-    };
-    const patchObj = (obj, source) => {
-        if (!obj || typeof obj !== 'object') return;
-        patchValue(obj, 'href', source);
-        patchValue(obj, 'path', source);
-        patchValue(obj, 'url', source);
-    };
-    try {
-        let node = el;
-        for (let d = 0; d < 6 && node; d++) {
-            const vue = node.__vue__;
-            if (vue) {
-                console.log('ERP Menu Plugin: [align] depth', d, 'vue keys sample:', {
-                    hasProps: !!vue.$props,
-                    propsHref: vue.$props && (vue.$props.href || vue.$props.url || ''),
-                    hasItem: !!(vue.item || vue.menuItem || vue.routeItem || (vue.$attrs && (vue.$attrs.item || vue.$attrs['data-route-item']))),
-                    hasTo: !!(vue.to || (vue.$props && vue.$props.to))
-                });
-                if (vue.$props) {
-                    patchValue(vue.$props, 'href', 'props');
-                    patchValue(vue.$props, 'url', 'props');
-                }
-                const item = vue.item
-                    || (vue.$attrs && (vue.$attrs.item || vue.$attrs['data-route-item']))
-                    || vue.menuItem
-                    || vue.routeItem;
-                if (item) {
-                    console.log('ERP Menu Plugin: [align] item raw:', {
-                        href: item.href || '',
-                        path: item.path || '',
-                        url: item.url || '',
-                        name: item.name || ''
-                    });
-                }
-                patchObj(item, 'item');
-                const to = vue.to || (vue.$props && vue.$props.to);
-                if (typeof to === 'string') {
-                    const next = rewriteHrefToEntryOrigin(to);
-                    if (next !== to) {
-                        if (vue.to === to) vue.to = next;
-                        if (vue.$props && vue.$props.to === to) vue.$props.to = next;
-                        patched++;
-                        console.log('ERP Menu Plugin: [align] patched to(string):', to, '->', next);
-                    }
-                } else {
-                    patchObj(to, 'to');
-                }
-            }
-            node = node.parentElement;
-        }
-    } catch (e) {
-        console.warn('ERP Menu Plugin: [align] error:', e);
-    }
-    console.log('ERP Menu Plugin: [align] done, patched count=', patched);
-}
-
 function triggerOriginalClick(text, path = [], topLevelMenuName = null) {
     const item = findOriginalMenuItem(text, path, topLevelMenuName);
     if (!item) {
         console.warn('ERP Menu Plugin: Could not find menu item:', text, 'with path:', path, 'in top menu:', topLevelMenuName);
         return;
     }
-    console.log('ERP Menu Plugin: [click] before align:', text, 'path=', path, 'top=', topLevelMenuName, 'entry=', window.location.href);
-    alignMenuItemHrefToEntry(item);
     const route = getMenuItemRouteInfo(item) || {};
-    console.log('ERP Menu Plugin: [click] route after align:', route);
     const topMenu = topLevelMenuName || currentTopLevelMenuName || '';
     if (topMenu) {
         rememberTabContext({
@@ -1548,11 +1445,7 @@ function triggerOriginalClick(text, path = [], topLevelMenuName = null) {
             href: route.href || ''
         });
     }
-    if (activateExistingTagByRoute(route, text)) {
-        console.log('ERP Menu Plugin: [click] activated existing tag, skip item.click');
-        return;
-    }
-    console.log('ERP Menu Plugin: [click] calling item.click()');
+    if (activateExistingTagByRoute(route, text)) return;
     item.click();
 }
 
@@ -2071,12 +1964,11 @@ function displaySearchResults(results, searchDropdown, query) {
 
 // 从存储中读取开关状态
 function loadToggleState() {
-    chrome.storage.sync.get(['menuModificationEnabled', 'headerActionsPosition', 'rewriteMenuHrefToEntry'], (result) => {
+    chrome.storage.sync.get(['menuModificationEnabled', 'headerActionsPosition'], (result) => {
         const enabled = result.menuModificationEnabled !== false; // 默认为true
         headerActionsPosition = result.headerActionsPosition === 'left' ? 'left' : 'right';
-        rewriteMenuHrefToEntry = result.rewriteMenuHrefToEntry !== false; // 默认为true
         isMenuModificationEnabled = enabled;
-        console.log('ERP Menu Plugin: Menu modification enabled:', enabled, 'header position:', headerActionsPosition, 'rewrite href:', rewriteMenuHrefToEntry);
+        console.log('ERP Menu Plugin: Menu modification enabled:', enabled, 'header position:', headerActionsPosition);
         
         if (enabled) {
             applyCustomLayout();
@@ -2110,10 +2002,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 setTimeout(collapseFunc, 50);
             }
         }
-        sendResponse({ success: true });
-    } else if (request.action === 'setRewriteMenuHrefToEntry') {
-        rewriteMenuHrefToEntry = request.enabled !== false;
-        console.log('ERP Menu Plugin: Rewrite menu href to entry:', rewriteMenuHrefToEntry);
         sendResponse({ success: true });
     }
     return true;

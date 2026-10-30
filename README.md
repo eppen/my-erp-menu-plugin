@@ -56,38 +56,60 @@
 ├── privacy.html         # 公开隐私政策（商店 Privacy Policy URL）
 ├── PRIVACY-STORE.md     # Edge Partner Center Privacy 页填写指南
 ├── CERTIFICATION-NOTES.md  # Edge Notes for certification 文稿
-├── package.py           # 打包脚本，用于生成 .zip 发布包
+├── package.json         # npm 依赖（esbuild）与脚本
+├── scripts/build.js     # esbuild：逐文件 minify → build/
+├── package.py           # 打包脚本：先构建，再从 build/ 生成商店安装包
 ├── generate_icons.*     # 图标生成辅助脚本 (Python/JS/HTML)
 └── images/              # 存放扩展图标
 ```
 
 ## 开发与构建
 
+开发调试仍加载**项目根目录**（未压缩源码）。发布前用 esbuild 压缩后再打包。
+
+### 首次准备
+
+```bash
+npm install
+```
+
 ### 图标生成
 项目包含自动生成图标的脚本。如果更改了图标样式，可以使用 `generate_icons.py` 或 `generate_icons.html` 重新生成不同尺寸的图标文件。
 
-### 打包（Chrome / Edge）
-项目内置 `package.py` 打包脚本，用于生成可以直接上传到浏览器扩展商店的 zip 包。
+### 仅构建（esbuild 压缩）
 
-- **同时打包 Chrome 和 Edge（推荐）**：
+```bash
+npm run build
+```
+
+产物在 `build/`：`background.js` / `content.js` / `popup.js` / `styles.css` 已 minify，`popup.html` 与图标原样复制。可用 `npm run watch` 边改边重建；排查压缩问题时用 `node scripts/build.js --no-minify`。
+
+### 打包（Chrome / Edge / Firefox）
+`package.py` 默认先跑 esbuild，再从 `build/` 打出商店安装包。
+
+- **同时打包 Chrome、Edge、Firefox（推荐）**：
 
 ```bash
 python package.py
+# 或：npm run package
 ```
 
-- **仅打包 Chrome 插件**：
+- **仅打包某一目标**：
 
 ```bash
 python package.py --target chrome
+python package.py --target edge
+python package.py --target firefox
 ```
 
-- **仅打包 Edge 插件**：
+- **跳过构建**（已有 `build/` 时）：
 
 ```bash
-python package.py --target edge
+python package.py --skip-build
 ```
 
 脚本会自动读取 `manifest.json` 中的 `version` 字段，并生成类似下面的文件：
 
-- `my-erp-menu-plugin-chrome-v1.1.1.zip`  （用于上传到 Chrome Web Store）
-- `my-erp-menu-plugin-edge-v1.1.1.zip`    （用于上传到 Edge 外接程序商店）
+- `dist/chrome/my-erp-menu-plugin-chrome-v1.2.29.zip`
+- `dist/edge/my-erp-menu-plugin-edge-v1.2.29.zip`
+- `dist/firefox/my-erp-menu-plugin-firefox-v1.2.29.xpi`
